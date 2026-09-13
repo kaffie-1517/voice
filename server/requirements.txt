@@ -1,0 +1,16 @@
+# Relay server — Strands Agents backend
+#
+# The [anthropic,openai] extras are installed so Relay runs before Bedrock model
+# access is switched on. Once Bedrock is enabled, no reinstall is needed — the
+# base package already ships the Bedrock provider; just set LLM_PROVIDER=bedrock.
+strands-agents[anthropic,openai]
+strands-agents-tools
+
+fastapi
+uvicorn[standard]
+pydantic
+python-dotenv
+
+# Optional — only needed for the AgentCore Memory layer. Relay degrades to a
+# local JSON store when this is absent, so the demo never hard-fails on it.
+# pip install bedrock-agentcore

@@ -1,0 +1,19 @@
+# node
+node_modules/
+dist/
+.vite/
+
+# python
+.venv/
+__pycache__/
+*.pyc
+
+# secrets & local state
+.env
+.env.local
+.relay-memory.json
+
+# misc
+*.log
+.DS_Store
+*.tsbuildinfo
