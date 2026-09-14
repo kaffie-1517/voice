@@ -20,3 +20,4 @@ __pycache__/
 
 # telegram links
 .relay-telegram.json
+.relay-reminders.json

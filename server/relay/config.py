@@ -14,11 +14,17 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# boto3 reads Bedrock API keys from AWS_BEARER_TOKEN_BEDROCK. Accept the
+# friendlier name in .env and hand it over under the one boto3 knows.
+if os.environ.get("AWS_BEDROCK_API_KEY") and not os.environ.get("AWS_BEARER_TOKEN_BEDROCK"):
+    os.environ["AWS_BEARER_TOKEN_BEDROCK"] = os.environ["AWS_BEDROCK_API_KEY"].strip()
+
 
 def _has_aws_credentials() -> bool:
     return any(
         os.environ.get(key)
         for key in (
+            "AWS_BEARER_TOKEN_BEDROCK",
             "AWS_BEDROCK_API_KEY",
             "AWS_ACCESS_KEY_ID",
             "AWS_PROFILE",

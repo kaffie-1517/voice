@@ -138,7 +138,8 @@ Judges should know exactly what they are looking at.
 | Prediction loop, executor agent, call partner | Real Strands agents, live model calls |
 | Speech in (Whisper) and out (neural TTS) | Real, via Groq; browser fallbacks |
 | `send_message`, `send_document` tools | **Real** — deliver to linked Telegram chats |
-| `set_reminder`, `place_call`, `order_item` tools | **Simulated** — the agent calls them and a receipt is logged to the Done tab; nothing external happens |
+| `set_reminder` tool | **Real** — the agent computes the time; the reminder fires on schedule to the user's Telegram chat and the Done tab, and survives a restart |
+| `place_call`, `order_item` tools | **Simulated** — the agent calls them and a receipt is logged to the Done tab; nothing external happens |
 | Phone calls | **Simulated partner** (receptionist, pharmacy, son). No telephony. The hard part — replying in time — is fully exercised |
 | Personalisation memory | Real; local JSON store today, AgentCore Memory backend coded and switchable by config |
 | Demo persona "Maya Ellis" and her contacts | Fictional |

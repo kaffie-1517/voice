@@ -6,7 +6,8 @@ Tuesday", something has to decide which tools to call, in what order, with what
 arguments. That is a model-driven tool loop, which is exactly what Strands is for.
 
 send_message and send_document deliver for real when the recipient is linked
-on Telegram; everything else simulates its effect and returns a receipt.
+on Telegram, and set_reminder really fires (to Telegram and the activity
+feed); place_call and order_item simulate their effect and return a receipt.
 Swapping a tool for a real integration is a change inside that one function —
 the agent, the prompt, and the UI are untouched.
 """
@@ -15,6 +16,7 @@ from __future__ import annotations
 
 import time
 from collections import defaultdict
+from datetime import datetime
 from typing import Any
 
 from strands import Agent, tool
@@ -83,19 +85,24 @@ def send_document(recipient: str, document: str, tool_context: ToolContext) -> s
 
 
 @tool(context=True)
-def set_reminder(what: str, when: str, tool_context: ToolContext) -> str:
-    """Set a reminder for the user.
+def set_reminder(what: str, when: str, when_iso: str, tool_context: ToolContext) -> str:
+    """Set a reminder for the user. It will be delivered to them at that time.
 
     Args:
         what: What they are being reminded about, in their own words.
-        when: When to remind them, e.g. "Tuesday at 9am" or "tomorrow morning".
+        when: When to remind them, as they said it, e.g. "Tuesday at 9am",
+            "in two minutes", "tomorrow morning".
+        when_iso: The same moment as an ISO 8601 local datetime, computed from
+            the current time given in the request, e.g. "2026-09-15T09:00".
+            If they gave a day but no time, use 09:00.
 
     Returns:
         A confirmation of the reminder that was set.
     """
-    return activity.add(
-        _session_of(tool_context), "reminder", f"Reminder set: {what} — {when}."
-    )
+    from .reminders import schedule
+
+    receipt, _ = schedule(_session_of(tool_context), what, when, when_iso)
+    return activity.add(_session_of(tool_context), "reminder", receipt)
 
 
 @tool(context=True)
@@ -159,9 +166,11 @@ async def execute(text: str, action: ActionSpec | None, session_id: str) -> Comm
         detail = activity.add(session_id, "noted", f'Noted: "{text}"')
         return CommitResponse(spoken=text, receipt=detail, source="scripted")
 
+    now = datetime.now()
     intent = f'The person said: "{text}"'
     if action and action.type != "none":
         intent += f"\nThey expect this to result in: {action.summary or action.type}"
+    intent += f"\nCurrent local time: {now.strftime('%A %Y-%m-%dT%H:%M')}"
     intent += "\n\nCarry out what they asked for, then confirm it in one short sentence."
 
     try:

@@ -136,6 +136,15 @@ def deliver_document(recipient: str, document: str) -> bool:
     return r.is_success
 
 
+async def notify_me(text: str) -> bool:
+    """Deliver to the user's own chat (set with /me). Used by reminders."""
+    if state.me is None or not settings.telegram_bot_token:
+        return False
+    async with httpx.AsyncClient(timeout=15) as client:
+        r = await client.post(_api_url("sendMessage"), json={"chat_id": state.me, "text": text})
+    return r.is_success
+
+
 # --- inbound -------------------------------------------------------------------
 
 
