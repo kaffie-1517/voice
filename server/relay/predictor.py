@@ -16,6 +16,7 @@ from .config import settings
 from .memory import learned_phrases
 from .profile import demo_profile
 from .prompts import anchor_counts, build_predict_system_prompt, build_predict_user_prompt
+from .safety import implied_action
 from .providers import load_model
 from .schemas import (
     ActionSpec,
@@ -37,8 +38,8 @@ def _to_candidates(prediction: PredictionSet, count: int) -> list[Candidate]:
         text = utterance.text.strip().strip('"')
         if not text:
             continue
-        action = None
-        if utterance.action_type and utterance.action_type != "none":
+        action = implied_action(text)
+        if action is None and utterance.action_type and utterance.action_type != "none":
             action = ActionSpec(
                 type=utterance.action_type,
                 summary=utterance.action_summary or text,

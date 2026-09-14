@@ -7,7 +7,14 @@ predictor resolve the fragment "chuh" to "Dr. Chen" instead of guessing.
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 from .schemas import Contact, UserProfile
+
+# What she (or her family) has told Relay since setup: contacts shared from a
+# phone book, notes typed or spoken. Merged into the profile on load.
+LEARNED_PATH = Path(".relay-profile.json")
 
 demo_profile = UserProfile(
     name="Maya Ellis",
@@ -66,3 +73,54 @@ demo_profile = UserProfile(
         "long approximate one."
     ),
 )
+
+
+def _load_learned() -> dict:
+    if LEARNED_PATH.exists():
+        try:
+            return json.loads(LEARNED_PATH.read_text("utf-8"))
+        except (json.JSONDecodeError, OSError):
+            pass
+    return {"contacts": [], "notes": []}
+
+
+_learned = _load_learned()
+
+
+def _save_learned() -> None:
+    try:
+        LEARNED_PATH.write_text(json.dumps(_learned, indent=2), "utf-8")
+    except OSError:
+        pass
+
+
+def _apply(contact: dict) -> None:
+    if any(c.name.lower() == contact["name"].lower() for c in demo_profile.contacts):
+        return
+    demo_profile.contacts.append(Contact(**contact))
+
+
+for _c in _learned["contacts"]:
+    _apply(_c)
+if _learned["notes"]:
+    demo_profile.notes += " " + " ".join(_learned["notes"])
+
+
+def add_contact(name: str, relationship: str = "contact", phone: str = "", notes: str = "") -> Contact:
+    """Someone she shared from her phone book, or named. Known from now on."""
+    entry = {"name": name.strip(), "relationship": relationship.strip() or "contact",
+             "phone": phone.strip(), "notes": notes.strip()}
+    _apply(entry)
+    _learned["contacts"].append(entry)
+    _save_learned()
+    return Contact(**entry)
+
+
+def add_note(text: str) -> None:
+    """A fact about her life, in her or her family's words."""
+    text = text.strip()
+    if not text:
+        return
+    _learned["notes"].append(text)
+    demo_profile.notes += " " + text
+    _save_learned()

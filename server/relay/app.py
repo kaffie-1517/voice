@@ -32,6 +32,7 @@ from .schemas import (
     TranscribeResponse,
     UserProfile,
 )
+from .safety import implied_action
 from .speech import stt_available, synthesize, transcribe, tts_available
 from . import reminders, telegram
 
@@ -125,8 +126,9 @@ async def commit(
     """The user chose an utterance. Remember it, and run any action it implies."""
     await asyncio.to_thread(memory.record_choice, req.text, req.channel)
 
-    if req.action and req.action.type != "none":
-        return await execute(req.text, req.action, x_relay_session)
+    action = implied_action(req.text) or req.action
+    if action and action.type != "none":
+        return await execute(req.text, action, x_relay_session)
 
     return CommitResponse(spoken=req.text, receipt="", source=settings.provider)  # type: ignore[arg-type]
 

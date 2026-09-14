@@ -10,7 +10,8 @@ from pydantic import BaseModel, Field
 InputKind = Literal["speech", "keyword", "typed"]
 Channel = Literal["call", "voicenote", "message", "inperson"]
 ActionType = Literal[
-    "send_document", "set_reminder", "send_message", "place_call", "order", "none"
+    "send_document", "set_reminder", "send_message", "place_call", "order",
+    "alert_emergency", "share_location", "none",
 ]
 EngineSource = Literal["bedrock", "anthropic", "openai", "groq", "scripted"]
 

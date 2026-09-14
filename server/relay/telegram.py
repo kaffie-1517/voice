@@ -32,7 +32,8 @@ from .config import settings
 from .executor import execute
 from .memory import memory
 from .predictor import predict
-from .profile import demo_profile
+from .profile import add_contact, add_note, demo_profile
+from .safety import implied_action
 from .schemas import Candidate, InputSignal, Partner, PredictRequest, Turn
 from .speech import transcribe
 
@@ -62,6 +63,7 @@ class TelegramState:
     def __init__(self) -> None:
         self.me: int | None = None
         self.links: dict[str, int] = {}  # profile contact name -> chat id
+        self.location: dict[str, float] | None = None  # {"lat", "lon"}, shared by her
         self.transcripts: dict[str, list[Turn]] = {}
         self._load()
 
@@ -71,12 +73,15 @@ class TelegramState:
                 data = json.loads(STATE_PATH.read_text("utf-8"))
                 self.me = data.get("me")
                 self.links = {k: int(v) for k, v in data.get("links", {}).items()}
+                self.location = data.get("location")
             except (json.JSONDecodeError, OSError, ValueError):
                 pass
 
     def save(self) -> None:
         try:
-            STATE_PATH.write_text(json.dumps({"me": self.me, "links": self.links}, indent=2), "utf-8")
+            STATE_PATH.write_text(
+                json.dumps({"me": self.me, "links": self.links, "location": self.location}, indent=2), "utf-8"
+            )
         except OSError:
             pass
 
@@ -132,6 +137,25 @@ def deliver_document(recipient: str, document: str) -> bool:
             _api_url("sendDocument"),
             data={"chat_id": chat_id, "caption": f"From {demo_profile.name}: {document}"},
             files={"document": (path.name, path.read_bytes(), "application/pdf")},
+        )
+    return r.is_success
+
+
+def maps_link() -> str | None:
+    if not state.location:
+        return None
+    return f"https://maps.google.com/?q={state.location['lat']},{state.location['lon']}"
+
+
+def deliver_location(recipient: str) -> bool:
+    """Send her last shared position as a live map pin."""
+    chat_id = state.chat_for(recipient)
+    if chat_id is None or not settings.telegram_bot_token or not state.location:
+        return False
+    with httpx.Client(timeout=15) as client:
+        r = client.post(
+            _api_url("sendLocation"),
+            json={"chat_id": chat_id, "latitude": state.location["lat"], "longitude": state.location["lon"]},
         )
     return r.is_success
 
@@ -205,6 +229,17 @@ class Bot:
         for k in [k for k, v in _pending.items() if time.time() - v["at"] > 1800]:
             _pending.pop(k, None)
 
+    async def ask_location(self, chat_id: int) -> None:
+        """Telegram's own permission prompt: one tap to share, or ignore."""
+        await self.call(
+            "sendMessage", chat_id=chat_id,
+            text="Can Relay know where you are? It is only used to tell helpers where to find you.",
+            reply_markup={
+                "keyboard": [[{"text": "📍 Share my location", "request_location": True}]],
+                "one_time_keyboard": True, "resize_keyboard": True,
+            },
+        )
+
     async def on_message(self, msg: dict[str, Any]) -> None:
         chat_id = int(msg["chat"]["id"])
         text = (msg.get("text") or "").strip()
@@ -217,6 +252,37 @@ class Bot:
             state.me = chat_id
             state.save()
             await self.send(chat_id, f"This is {demo_profile.name}'s chat now. Send a voice note or a few words.")
+            await self.ask_location(chat_id)
+            return
+        if text.startswith("/where"):
+            await self.ask_location(chat_id)
+            return
+        if text.startswith("/note"):
+            note = text[5:].strip()
+            if not note:
+                await self.send(chat_id, "Tell me something about your life, e.g. /note I take my pills at 8 every morning.")
+                return
+            add_note(note)
+            await self.send(chat_id, "Noted. Relay will keep that in mind when it suggests what to say.")
+            return
+        if "contact" in msg and chat_id == state.me:
+            card = msg["contact"]
+            name = " ".join(p for p in (card.get("first_name", ""), card.get("last_name", "")) if p).strip() or "Unknown"
+            contact = add_contact(name, "contact", card.get("phone_number", ""))
+            await self.send(
+                chat_id,
+                f"Added {contact.name}. Tell me who they are with /note {contact.name.split()[0]} is my neighbour.",
+            )
+            return
+        if "location" in msg and chat_id == state.me:
+            loc = msg["location"]
+            state.location = {"lat": float(loc["latitude"]), "lon": float(loc["longitude"])}
+            state.save()
+            await self.call(
+                "sendMessage", chat_id=chat_id,
+                text="Got it. If you ever need help, the people who come will know where you are.",
+                reply_markup={"remove_keyboard": True},
+            )
             return
         if text.startswith("/link"):
             name = text[5:].strip()
@@ -286,8 +352,10 @@ class Bot:
 
         await asyncio.to_thread(memory.record_choice, chosen.text, offer["channel"])
         receipt = ""
-        if chosen.action and chosen.action.type != "none":
-            result = await execute(chosen.text, chosen.action, f"tg-{chat_id}")
+        action = implied_action(chosen.text) or chosen.action
+        if action and action.type != "none":
+            await self.send(chat_id, "Working on it…")
+            result = await execute(chosen.text, action, f"tg-{chat_id}")
             receipt = result.receipt
 
         if offer["deliver_to"]:

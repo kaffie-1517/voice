@@ -125,20 +125,81 @@ def send_message(recipient: str, body: str, tool_context: ToolContext) -> str:
 
 @tool(context=True)
 def place_call(contact: str, purpose: str, tool_context: ToolContext) -> str:
-    """Start an assisted phone call to a contact.
+    """Start an assisted phone call to a contact, or ask them to call back.
 
-    The user does not speak unaided on this call — Relay suggests each reply and
-    speaks the one they choose.
+    The user does not speak unaided on a call — Relay suggests each reply and
+    speaks the one they choose. Contacts reachable on Telegram are told she is
+    calling and asked to ring her now.
 
     Args:
-        contact: Who to call.
+        contact: Who to call — a name, a relationship, or a service such as
+            "the fire brigade" or "an ambulance".
         purpose: Why they are calling, so replies can be predicted in context.
 
     Returns:
         A confirmation that the call is being placed.
     """
+    from .telegram import deliver_message
+
     who = _resolve_contact(contact)
-    return activity.add(_session_of(tool_context), "call", f"Calling {who} — {purpose}.")
+    reached = deliver_message(
+        who,
+        f"📞 {demo_profile.name.split()[0]} is calling you through Relay — {purpose}. "
+        "She may not be able to say much. Please call her now.",
+    )
+    via = " — reached on Telegram, asked to call her back" if reached else ""
+    return activity.add(
+        _session_of(tool_context), "call",
+        f"Calling {who} — {purpose}{via}. Open the Call tab in Relay to talk with replies ready.",
+    )
+
+
+@tool(context=True)
+def alert_emergency(situation: str, service: str, tool_context: ToolContext) -> str:
+    """Raise the alarm: tell every one of the user's emergency contacts what is
+    happening and call the right emergency service. Use for fire, a fall,
+    chest pain, breathing trouble, or any plain call for help.
+
+    Args:
+        situation: What is wrong, in one plain sentence, in her words.
+        service: Which service to call — "fire brigade", "ambulance", "police",
+            or "none" if it is clearly not that kind of emergency.
+
+    Returns:
+        Who was reached and what was called.
+    """
+    from .telegram import deliver_location, deliver_message, maps_link, state
+
+    session = _session_of(tool_context)
+    first = demo_profile.name.split()[0]
+    where = maps_link()
+    reached: list[str] = []
+    for contact in demo_profile.contacts:
+        # Adults who can act: not the pharmacy, not her nine-year-old grandson.
+        if contact.relationship in ("pharmacy", "grandson"):
+            continue
+        if deliver_message(
+            contact.name,
+            f"🚨 EMERGENCY from {first}: {situation}\n"
+            f"She has aphasia and may not be able to speak. "
+            f"Please call her right now, and call emergency services if you cannot reach her."
+            + (f"\nWhere she is: {where}" if where else ""),
+        ):
+            parts = contact.name.split()
+            reached.append(" ".join(parts[:2]) if parts[0].endswith(".") else parts[0])
+            if where:
+                deliver_location(contact.name)
+    activity.add(
+        session, "emergency",
+        f"Alerted emergency contacts: {', '.join(reached) if reached else 'none reachable on Telegram'}.",
+    )
+    if service and service.lower() != "none":
+        activity.add(session, "call", f"Calling the {service} — {situation}")
+    who = ", ".join(reached) if reached else "no one on Telegram"
+    called = f" and calling the {service}" if service and service.lower() != "none" else ""
+    if not state.links:
+        who += " (no contacts linked yet — use /link in Telegram)"
+    return f"Alerted {who}{called}."
 
 
 @tool(context=True)
@@ -156,7 +217,32 @@ def order_item(item: str, tool_context: ToolContext, vendor: str = "") -> str:
     return activity.add(_session_of(tool_context), "order", f"Ordered {item}{where}.")
 
 
-TOOLS = [send_document, set_reminder, send_message, place_call, order_item]
+@tool(context=True)
+def share_location(recipient: str, tool_context: ToolContext) -> str:
+    """Send the user's current location to one of her contacts as a map pin.
+
+    Args:
+        recipient: Who should receive it — a name or a relationship.
+
+    Returns:
+        A confirmation, or a note that her location is not known yet.
+    """
+    from .telegram import deliver_location, state
+
+    who = _resolve_contact(recipient)
+    if not state.location:
+        return activity.add(
+            _session_of(tool_context), "location",
+            f"Could not share location with {who}: she has not shared it yet (/where in Telegram).",
+        )
+    sent = deliver_location(who)
+    return activity.add(
+        _session_of(tool_context), "location",
+        f"Shared her location with {who}." if sent else f"Could not reach {who} on Telegram to share her location.",
+    )
+
+
+TOOLS = [send_document, set_reminder, send_message, place_call, order_item, alert_emergency, share_location]
 
 
 async def execute(text: str, action: ActionSpec | None, session_id: str) -> CommitResponse:
@@ -168,7 +254,13 @@ async def execute(text: str, action: ActionSpec | None, session_id: str) -> Comm
 
     now = datetime.now()
     intent = f'The person said: "{text}"'
-    if action and action.type != "none":
+    if action and action.type == "alert_emergency":
+        intent += (
+            "\nTHIS IS AN EMERGENCY. Call alert_emergency first with what is wrong "
+            "and the right service. Do not ask questions. Do not do anything else "
+            "unless she asked for it."
+        )
+    elif action and action.type != "none":
         intent += f"\nThey expect this to result in: {action.summary or action.type}"
     intent += f"\nCurrent local time: {now.strftime('%A %Y-%m-%dT%H:%M')}"
     intent += "\n\nCarry out what they asked for, then confirm it in one short sentence."

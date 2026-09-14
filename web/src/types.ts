@@ -6,6 +6,8 @@ export type ActionType =
   | "send_document"
   | "set_reminder"
   | "send_message"
+  | "alert_emergency"
+  | "share_location"
   | "place_call"
   | "order"
   | "none";

@@ -128,6 +128,10 @@ Then, on phones:
   she taps is sent as her own message.
 - "Send my scan to Dr. Chen" runs the Strands executor, whose `send_document`
   tool posts a PDF into the linked Dr. Chen chat.
+- "Tell Sam I'll be late" → Sam's phone. "Call Dr. Chen for an appointment" →
+  Dr. Chen is asked to ring her. "Remind me at 4" → her phone buzzes at 4.
+- "Help, there's a fire" → every adult contact gets an alert with her words
+  and, if she shared it, a map pin of where she is.
 
 ## What is real and what is simulated
 
@@ -137,9 +141,14 @@ Judges should know exactly what they are looking at.
 |---|---|
 | Prediction loop, executor agent, call partner | Real Strands agents, live model calls |
 | Speech in (Whisper) and out (neural TTS) | Real, via Groq; browser fallbacks |
-| `send_message`, `send_document` tools | **Real** — deliver to linked Telegram chats |
+| `send_message`, `send_document`, `share_location` tools | **Real** — deliver to linked Telegram chats (message, PDF, map pin) |
 | `set_reminder` tool | **Real** — the agent computes the time; the reminder fires on schedule to the user's Telegram chat and the Done tab, and survives a restart |
-| `place_call`, `order_item` tools | **Simulated** — the agent calls them and a receipt is logged to the Done tab; nothing external happens |
+| `alert_emergency` tool | **Real alerts, simulated call** — every adult contact on Telegram gets an alert with her words and a map link; the call to fire brigade / ambulance / police is logged, not dialled |
+| `place_call` tool | **Half real** — no telephony; the contact is told on Telegram that she is calling and asked to ring her, and she is pointed to the assisted-call view |
+| `order_item` tool | **Simulated** — a receipt is logged to the Done tab; nothing external happens |
+| Emergency and request detection | **Code, not model** — "fire", "help", "chest pain", "tell Sam…", "call Dr. Chen", "remind me…" always reach the agent, whatever the predictor attached |
+| Location | Only with her consent, via Telegram's own share-location prompt (`/me` or `/where`); used solely in alerts and `share_location` |
+| Knowing her better | Only what she gives it: a contact card shared from her phone book adds a person; `/note` adds a fact about her life. Both feed the predictor and Whisper's vocabulary at once. Relay does not read other chats, call logs, or notes apps — a native app would be needed, and that is future work |
 | Phone calls | **Simulated partner** (receptionist, pharmacy, son). No telephony. The hard part — replying in time — is fully exercised |
 | Personalisation memory | Real; local JSON store today, AgentCore Memory backend coded and switchable by config |
 | Demo persona "Maya Ellis" and her contacts | Fictional |

@@ -24,8 +24,9 @@ Relay listens to whatever *does* come out — a syllable, a broken word, a tappe
 - **Live call view.** A simulated receptionist, pharmacy, or family member is on the line. When they ask a question, Relay's replies appear *before the user has said anything*, then sharpen as fragments come in. Tap, and it is spoken. Press 1–4 from the keyboard.
 - **Say view.** Voice notes, messages, in-person conversation — the same engine with different length and tone.
 - **Telegram.** Family members message or voice-note the bot; the user gets reply candidates on their phone and taps one; it is delivered. In *any* chat, `@relay1517_bot om tues` pops up the candidates and sends the chosen one as their own message.
-- **Actions.** "Send my scan to Dr. Chen" makes the agent call `send_document`, and a PDF lands in Dr. Chen's Telegram chat. Reminders and the rest are logged to the Done tab.
-- **It learns.** Every sentence the user chooses is remembered and recalled by sound — after picking "I want to go home" once, a mumbled "om" brings that phrasing back.
+- **Actions.** "Send my scan to Dr. Chen" makes the agent call `send_document`, and a PDF lands in Dr. Chen's Telegram chat. "Tell Sam I'll be late" reaches Sam's phone. "Call Dr. Chen for an appointment" asks Dr. Chen to ring her and opens the assisted-call view. "Remind me in two minutes" makes her phone buzz two minutes later — the agent computes the time, the server fires it.
+- **Emergencies.** "Help, there's a fire" is detected in code, not left to the model: the agent alerts every adult contact on Telegram with her exact words and a map pin of where she is (shared with her consent through Telegram's own location prompt), and logs the call to the fire brigade or ambulance. She cannot dial 911 and explain; this is the next best thing, in one tap.
+- **It learns.** Every sentence the user chooses is remembered and recalled by sound — after picking "I want to go home" once, a mumbled "om" brings that phrasing back. Share a contact card from your phone book and Relay knows that person; `/note my neighbour Ruth checks on me on Fridays` and it knows that too. Only what she chooses to share — Relay never reads other chats, call logs or notes.
 - **It never goes silent.** If the model is slow, throttled, or unreachable, an offline engine answers within the deadline — with emergency rules for "fire" and "help", and the user's own words offered verbatim if nothing else fits.
 
 ## How we built it
@@ -34,7 +35,7 @@ Relay listens to whatever *does* come out — a syllable, a broken word, a tappe
 
 The *prediction loop* is a Strands `Agent` with no tools and a Pydantic `structured_output_model` — one constrained call, no agent loop. Someone is waiting on the line; a correct suggestion that lands two seconds late is a failed suggestion. We force the structured-output tool from the first request (Strands otherwise spends a second round trip asking for it) and hold the whole thing to an eight-second deadline before falling back offline.
 
-The *action executor* is the opposite: a real Strands agent with `@tool` functions (`send_document`, `set_reminder`, `send_message`, `place_call`, `order_item`) and a genuine tool loop. It runs once, after the user commits, and is allowed to think. We watched it chain `send_document` and `set_reminder` from a single sentence without being told to. Tools read the client session from Strands' `ToolContext`, so each person's activity feed is their own.
+The *action executor* is the opposite: a real Strands agent with `@tool` functions (`send_document`, `set_reminder`, `send_message`, `place_call`, `share_location`, `alert_emergency`, `order_item`) and a genuine tool loop. It runs once, after the user commits, and is allowed to think. We watched it chain `send_document` and `set_reminder` from a single sentence without being told to. Tools read the client session from Strands' `ToolContext`, so each person's activity feed is their own.
 
 A third small Strands agent plays the person on the other end of the call, with a persona prompt and a one-question-at-a-time rule.
 

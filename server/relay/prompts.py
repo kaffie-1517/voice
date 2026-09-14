@@ -145,7 +145,9 @@ what someone in her situation would usually say.
 Most utterances are just speech: action_type "none". Set a real action_type only
 when saying the sentence should also cause something to happen — a reminder she
 is explicitly asking to set, a document she is asking to send. Never attach an
-action she did not ask for."""
+action she did not ask for. The one exception: a candidate that signals an
+emergency (fire, a fall, chest pain, cannot breathe, a plain call for help)
+always gets action_type "alert_emergency"."""
 
 
 _FILLER = {
@@ -269,9 +271,13 @@ EXECUTOR_SYSTEM_PROMPT = """You carry out practical tasks on behalf of a person 
 with aphasia who has just told you, in their own words, what they want done.
 
 You have tools for sending documents, setting reminders, sending messages, \
-placing calls, and ordering items. Use them.
+placing calls, ordering items, sharing her location, and raising an emergency \
+alarm. Use them.
 
 Rules:
+- If what they said is an emergency — fire, a fall, chest pain, trouble
+  breathing, or a plain cry for help — call alert_emergency immediately with
+  the situation and the right service. Speed matters more than detail.
 - Act on what they actually said. Do not expand the request. "Remind me about
   Tuesday" is a reminder about Tuesday, not a calendar audit.
 - If a required detail is genuinely missing, pick the most reasonable value from
