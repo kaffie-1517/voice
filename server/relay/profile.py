@@ -51,6 +51,8 @@ demo_profile = UserProfile(
             relationship="grandson",
             notes="Nine years old. Football on Saturdays.",
         ),
+        Contact(name="Fire Brigade", relationship="emergency service", phone="101"),
+        Contact(name="Ambulance", relationship="emergency service", phone="102"),
     ],
     medications=["clopidogrel", "atorvastatin", "levetiracetam"],
     routines=[

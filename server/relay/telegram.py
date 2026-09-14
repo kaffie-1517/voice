@@ -35,7 +35,7 @@ from .predictor import predict
 from .profile import add_contact, add_note, demo_profile
 from .safety import implied_action
 from .schemas import Candidate, InputSignal, Partner, PredictRequest, Turn
-from .speech import transcribe
+from .speech import synthesize, transcribe
 
 ASSETS = Path(__file__).resolve().parent.parent / "assets"
 STATE_PATH = Path(".relay-telegram.json")
@@ -190,6 +190,20 @@ class Bot:
             params["reply_markup"] = {"inline_keyboard": buttons}
         await self.call("sendMessage", **params)
 
+    async def say(self, chat_id: int, text: str) -> None:
+        """Post the chosen sentence as a voice message in her voice, so she can
+        hold the phone up to whoever is in the room."""
+        audio = await synthesize(text, "self", fmt="ogg")
+        if not audio:
+            return
+        r = await self.client.post(
+            _api_url("sendVoice"),
+            data={"chat_id": chat_id, "caption": text},
+            files={"voice": ("say.ogg", audio, "audio/ogg")},
+        )
+        if not r.json().get("ok"):
+            print(f"[relay] telegram sendVoice failed: {r.json().get('description')}")
+
     async def download(self, file_id: str) -> bytes:
         info = await self.call("getFile", file_id=file_id)
         r = await self.client.get(_file_url(info["file_path"]))
@@ -299,6 +313,13 @@ class Bot:
             await self.send(chat_id, f"Linked. You are {resolved}. Message here and {demo_profile.name.split()[0]} will answer.")
             return
 
+        # Nobody has claimed the bot yet: whoever speaks first is her. A
+        # family member links themselves explicitly with /link.
+        if state.me is None and chat_id not in state.links.values():
+            state.me = chat_id
+            state.save()
+            await self.send(chat_id, f"Hi — this is {demo_profile.name.split()[0]}'s chat now. Say what you need.")
+
         signals, shown = await self.fragments_from(msg)
         if not signals:
             return
@@ -351,6 +372,9 @@ class Bot:
         )
 
         await asyncio.to_thread(memory.record_choice, chosen.text, offer["channel"])
+        # Her own chat is the in-person surface: say it out loud for her.
+        if offer["deliver_to"] is None:
+            await self.say(chat_id, chosen.text)
         receipt = ""
         action = implied_action(chosen.text) or chosen.action
         if action and action.type != "none":

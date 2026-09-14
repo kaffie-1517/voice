@@ -46,7 +46,7 @@ logging.getLogger("strands.models.openai").setLevel(logging.ERROR)
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     # The first call to a provider pays for connection setup and a cold model
     # (~6s on Groq). Pay it here, not on the first thing the user says.
-    if settings.provider != "scripted":
+    if settings.provider != "scripted" and settings.warm_up:
         asyncio.create_task(
             predict(PredictRequest(signals=[InputSignal(kind="speech", text="hello")]))
         )

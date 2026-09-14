@@ -75,6 +75,7 @@ class Settings:
     agentcore_actor_id: str
     memory_path: str
     telegram_bot_token: str
+    warm_up: bool
     port: int
 
     @property
@@ -119,5 +120,7 @@ settings = Settings(
     agentcore_actor_id=os.environ.get("AGENTCORE_ACTOR_ID", "maya"),
     memory_path=os.environ.get("RELAY_MEMORY_PATH", ".relay-memory.json"),
     telegram_bot_token=os.environ.get("TELEGRAM_BOT_TOKEN", "").strip(),
+    # Each warm-up costs a prediction's worth of tokens; off while the per-minute budget is tight.
+    warm_up=os.environ.get("RELAY_WARM_UP", "0") == "1",
     port=int(os.environ.get("PORT", "8787")),
 )

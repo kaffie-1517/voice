@@ -13,6 +13,7 @@ directions:
 from __future__ import annotations
 
 import functools
+import os
 from typing import Any
 
 from pydantic import BaseModel
@@ -95,16 +96,14 @@ def _build_openai(
 
 
 def _build_groq(
-    model_id: str, temperature: float | None, max_tokens: int, force_tool: str | None
+    model_id: str, temperature: float | None, max_tokens: int, force_tool: str | None, api_key: str
 ) -> Any:
     """Groq speaks the OpenAI wire protocol, so Strands' OpenAIModel with a
     different base_url is the whole integration."""
-    import os
-
     from strands.models.openai import OpenAIModel
 
     client_args: dict[str, Any] = {
-        "api_key": os.environ["GROQ_API_KEY"],
+        "api_key": api_key,
         "base_url": "https://api.groq.com/openai/v1",
     }
     if force_tool:
@@ -120,17 +119,22 @@ def _build_groq(
 
 
 @functools.lru_cache(maxsize=8)
-def load_model(tier: str, structured: type[BaseModel] | None = None) -> Any | None:
+def load_model(tier: str, structured: type[BaseModel] | None = None, backup: bool = False) -> Any | None:
     """Return a Strands model for 'fast' or 'smart', or None in scripted mode.
 
     Pass the Pydantic model an agent will be constrained to when the agent does
     nothing but structured output; providers that can force the tool from the
     first request will. Leave it out for real tool-using agents.
 
+    `backup=True` returns the same tier on a second Groq account's key, for
+    when the first is rate-limited; None if no backup key is configured.
+
     Cached because model objects hold a provider client; rebuilding one per
     request would add a connection setup to the latency budget.
     """
     if settings.provider == "scripted":
+        return None
+    if backup and not (settings.provider == "groq" and os.environ.get("GROQ_API_KEY_BACKUP")):
         return None
 
     force_tool = structured.__name__ if structured else None
@@ -154,7 +158,8 @@ def load_model(tier: str, structured: type[BaseModel] | None = None) -> Any | No
         if settings.provider == "openai":
             return _build_openai(model_id, temperature, max_tokens, force_tool)
         if settings.provider == "groq":
-            return _build_groq(model_id, temperature, max_tokens, force_tool)
+            key = os.environ["GROQ_API_KEY_BACKUP" if backup else "GROQ_API_KEY"]
+            return _build_groq(model_id, temperature, max_tokens, force_tool, key)
     except Exception as exc:  # missing extra, bad credentials, unknown model id
         print(f"[relay] could not build {tier} model ({model_id}): {exc}")
         return None

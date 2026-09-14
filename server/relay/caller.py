@@ -9,12 +9,14 @@ fully exercised here, for free, and deterministically enough to rehearse a demo.
 from __future__ import annotations
 
 import asyncio
+from typing import Any
 
 from .config import settings
 from .prompts import build_partner_system_prompt, build_partner_user_prompt
 from .providers import load_model
 from .scenarios import find_scenario
 from .schemas import CallReplyRequest, CallReplyResponse, PartnerReply
+from .safety import is_throttled
 from .scripted import scripted_partner_reply
 
 
@@ -34,11 +36,11 @@ async def partner_reply(req: CallReplyRequest) -> CallReplyResponse:
         text, ended = scripted_partner_reply(req.scenario_id, req.transcript)
         return CallReplyResponse(text=text, ended=ended, source="scripted")
 
-    try:
+    async def live(m: Any) -> PartnerReply:
         from strands import Agent
 
         agent = Agent(
-            model=model,
+            model=m,
             system_prompt=build_partner_system_prompt(scenario),
             tools=[],
             callback_handler=None,
@@ -54,6 +56,16 @@ async def partner_reply(req: CallReplyRequest) -> CallReplyResponse:
         reply = result.structured_output
         if reply is None or not reply.text.strip():
             raise ValueError("empty partner reply")
+        return reply
+
+    try:
+        try:
+            reply = await live(model)
+        except Exception as exc:
+            backup = load_model("fast", PartnerReply, backup=True)
+            if backup is None or not is_throttled(exc):
+                raise
+            reply = await live(backup)
 
         return CallReplyResponse(
             text=reply.text.strip(),

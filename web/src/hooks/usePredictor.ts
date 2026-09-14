@@ -28,7 +28,7 @@ export interface PredictorState {
  * older result arriving late is dropped.
  */
 export function usePredictor(opts: Options): PredictorState {
-  const { signals, channel, partner, transcript, eager = false, debounceMs = 420 } = opts;
+  const { signals, channel, partner, transcript, eager = false, debounceMs = 700 } = opts;
   const [state, setState] = useState<PredictorState>({
     candidates: [],
     loading: false,

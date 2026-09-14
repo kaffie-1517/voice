@@ -114,7 +114,7 @@ async def transcribe(audio: bytes, filename: str) -> str | None:
         return None
 
 
-async def synthesize(text: str, who: str) -> bytes | None:
+async def synthesize(text: str, who: str, fmt: str = "wav") -> bytes | None:
     global _tts_retry_at
     client = _groq_client()
     if client is None or not tts_available() or not text.strip():
@@ -125,7 +125,7 @@ async def synthesize(text: str, who: str) -> bytes | None:
             model=TTS_MODEL,
             voice=TTS_VOICES.get(who, TTS_VOICES["self"]),
             input=text,
-            response_format="wav",
+            response_format=fmt,
         )
         return response.read()
 

@@ -53,3 +53,9 @@ def implied_action(text: str) -> ActionSpec | None:
         if pattern.search(stripped):
             return ActionSpec(type=kind, summary=summary)
     return None
+
+
+def is_throttled(exc: BaseException) -> bool:
+    """A provider saying 'not now' — worth one retry on a backup key."""
+    text = str(exc).lower()
+    return "429" in text or "rate limit" in text or "rate_limit" in text or "throttl" in text

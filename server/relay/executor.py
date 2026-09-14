@@ -14,9 +14,11 @@ the agent, the prompt, and the UI are untouched.
 
 from __future__ import annotations
 
+import re
 import time
 from collections import defaultdict
 from datetime import datetime
+from types import SimpleNamespace
 from typing import Any
 
 from strands import Agent, tool
@@ -27,6 +29,7 @@ from .config import settings
 from .profile import demo_profile
 from .prompts import EXECUTOR_SYSTEM_PROMPT
 from .providers import load_model
+from .safety import is_throttled
 from .schemas import ActionSpec, CommitResponse
 
 
@@ -175,8 +178,9 @@ def alert_emergency(situation: str, service: str, tool_context: ToolContext) -> 
     where = maps_link()
     reached: list[str] = []
     for contact in demo_profile.contacts:
-        # Adults who can act: not the pharmacy, not her nine-year-old grandson.
-        if contact.relationship in ("pharmacy", "grandson"):
+        # Adults who can act: not the pharmacy, not her nine-year-old grandson,
+        # and services get their own call below.
+        if contact.relationship in ("pharmacy", "grandson", "emergency service"):
             continue
         if deliver_message(
             contact.name,
@@ -193,10 +197,21 @@ def alert_emergency(situation: str, service: str, tool_context: ToolContext) -> 
         session, "emergency",
         f"Alerted emergency contacts: {', '.join(reached) if reached else 'none reachable on Telegram'}.",
     )
+    called = ""
     if service and service.lower() != "none":
-        activity.add(session, "call", f"Calling the {service} — {situation}")
+        # The service's own channel, when one is linked (a real dispatcher
+        # integration would go here); otherwise the call is logged only.
+        answered = deliver_message(
+            service,
+            f"🚒 EMERGENCY CALL via Relay for {demo_profile.name}: {situation}\n"
+            f"Caller has aphasia and cannot speak clearly. Phone: {demo_profile.contacts[1].phone}."
+            + (f"\nLocation: {where}" if where else ""),
+        )
+        if answered and where:
+            deliver_location(service)
+        activity.add(session, "call", f"Calling the {service} — {situation}" + (" (reached)" if answered else ""))
+        called = f" and calling the {service}"
     who = ", ".join(reached) if reached else "no one on Telegram"
-    called = f" and calling the {service}" if service and service.lower() != "none" else ""
     if not state.links:
         who += " (no contacts linked yet — use /link in Telegram)"
     return f"Alerted {who}{called}."
@@ -245,10 +260,65 @@ def share_location(recipient: str, tool_context: ToolContext) -> str:
 TOOLS = [send_document, set_reminder, send_message, place_call, order_item, alert_emergency, share_location]
 
 
+def _mentioned_contact(text: str) -> str | None:
+    """The first of her people named in the sentence, by name or relationship."""
+    low = text.lower()
+    for c in demo_profile.contacts:
+        first = c.name.split()[-1].lower()  # surname or single name
+        if c.name.lower() in low or first in low or c.relationship.lower() in low:
+            return c.name
+        if c.name.lower().startswith("dr.") and "doctor" in low:
+            return c.name
+    return None
+
+
+def _emergency_service(text: str) -> str:
+    low = text.lower()
+    if re.search(r"fire|smoke|burn", low):
+        return "fire brigade"
+    if re.search(r"ambulance|chest|breath|fall|fell|bleed|stroke|heart|unconscious|hurt|pain", low):
+        return "ambulance"
+    if re.search(r"police|intruder|break", low):
+        return "police"
+    return "ambulance" if re.search(r"help|emergenc", low) else "none"
+
+
+def offline_execute(text: str, action: ActionSpec, session_id: str) -> str:
+    """No model, or the model failed. The detected intent still runs the tools
+    directly. Cruder than the agent — no clever argument extraction — but an
+    emergency alert must never depend on a provider being up."""
+    ctx = SimpleNamespace(invocation_state={"session_id": session_id})
+    who = _mentioned_contact(text)
+    kind = action.type
+    if kind == "alert_emergency":
+        return alert_emergency(situation=text, service=_emergency_service(text), tool_context=ctx)
+    if kind == "place_call":
+        return place_call(contact=who or "Sam", purpose=text, tool_context=ctx)
+    if kind == "send_message":
+        # "Tell Sam I'll be late." -> body after the name, else the whole sentence.
+        body = text
+        if who:
+            m = re.search(rf"\b(tell|text|message|let)\s+\w+\s+(know\s+)?(that\s+)?(.+)$", text, re.I)
+            body = (m.group(4) if m else text).strip().rstrip(".") + "."
+        return send_message(recipient=who or "Sam", body=body, tool_context=ctx)
+    if kind == "share_location":
+        return share_location(recipient=who or "Sam", tool_context=ctx)
+    if kind == "set_reminder":
+        what = re.sub(r"^\s*remind me\s*(to\s+)?", "", text, flags=re.I).strip()
+        return set_reminder(what=what or text, when=text, when_iso="", tool_context=ctx)
+    if kind == "send_document":
+        return send_document(recipient=who or "Dr. Chen", document="her latest scan", tool_context=ctx)
+    if kind == "order":
+        return order_item(item=re.sub(r"^\s*(re)?order\s*", "", text, flags=re.I) or text, tool_context=ctx)
+    return activity.add(session_id, "noted", f'Noted: "{text}"')
+
+
 async def execute(text: str, action: ActionSpec | None, session_id: str) -> CommitResponse:
     """Run the committed utterance through the action agent."""
     model = load_model("smart")
     if model is None:
+        if action and action.type != "none":
+            return CommitResponse(spoken=text, receipt=offline_execute(text, action, session_id), source="scripted")
         detail = activity.add(session_id, "noted", f'Noted: "{text}"')
         return CommitResponse(spoken=text, receipt=detail, source="scripted")
 
@@ -265,9 +335,9 @@ async def execute(text: str, action: ActionSpec | None, session_id: str) -> Comm
     intent += f"\nCurrent local time: {now.strftime('%A %Y-%m-%dT%H:%M')}"
     intent += "\n\nCarry out what they asked for, then confirm it in one short sentence."
 
-    try:
+    async def live(m: Any) -> str:
         agent = Agent(
-            model=model,
+            model=m,
             system_prompt=EXECUTOR_SYSTEM_PROMPT,
             tools=TOOLS,
             callback_handler=None,
@@ -284,12 +354,25 @@ async def execute(text: str, action: ActionSpec | None, session_id: str) -> Comm
             receipt = " ".join(
                 b.get("text", "") for b in blocks if isinstance(b, dict)
             ).strip()
+        return receipt
+
+    try:
+        try:
+            receipt = await live(model)
+        except Exception as exc:
+            backup = load_model("smart", backup=True)
+            if backup is None or not is_throttled(exc):
+                raise
+            print("[relay] primary key throttled, retrying executor on backup key")
+            receipt = await live(backup)
         return CommitResponse(
             spoken=text,
             receipt=receipt or "Done.",
             source=settings.provider,  # type: ignore[arg-type]
         )
     except Exception as exc:
-        print(f"[relay] executor failed: {exc}")
+        print(f"[relay] executor failed, running the intent offline: {exc}")
+        if action and action.type != "none":
+            return CommitResponse(spoken=text, receipt=offline_execute(text, action, session_id), source="scripted")
         detail = activity.add(session_id, "noted", f'Noted: "{text}"')
         return CommitResponse(spoken=text, receipt=detail, source="scripted")

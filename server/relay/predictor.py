@@ -11,12 +11,13 @@ from __future__ import annotations
 import asyncio
 import time
 import uuid
+from typing import Any
 
 from .config import settings
 from .memory import learned_phrases
 from .profile import demo_profile
 from .prompts import anchor_counts, build_predict_system_prompt, build_predict_user_prompt
-from .safety import implied_action
+from .safety import implied_action, is_throttled
 from .providers import load_model
 from .schemas import (
     ActionSpec,
@@ -117,14 +118,14 @@ async def predict(req: PredictRequest) -> PredictResponse:
             degraded=False,
         )
 
-    try:
+    async def live(m: Any) -> list[Candidate]:
         from strands import Agent
 
         query = " ".join(s.text for s in req.signals)
         if req.transcript and req.transcript[-1].speaker == "partner":
             query += " " + req.transcript[-1].text
         agent = Agent(
-            model=model,
+            model=m,
             system_prompt=build_predict_system_prompt(
                 demo_profile, await learned_phrases(query)
             ),
@@ -144,10 +145,20 @@ async def predict(req: PredictRequest) -> PredictResponse:
         prediction = result.structured_output
         if prediction is None or not prediction.utterances:
             raise ValueError("model returned no utterances")
-
         candidates = _to_candidates(prediction, req.count)
         if not candidates:
             raise ValueError("no usable candidates after cleaning")
+        return candidates
+
+    try:
+        try:
+            candidates = await live(model)
+        except Exception as exc:
+            backup = load_model("fast", PredictionSet, backup=True)
+            if backup is None or not is_throttled(exc):
+                raise
+            print("[relay] primary key throttled, retrying prediction on backup key")
+            candidates = await live(backup)
 
         return PredictResponse(
             candidates=_honour_her_words(candidates, req),
