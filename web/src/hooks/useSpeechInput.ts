@@ -33,6 +33,8 @@ export interface SpeechInput {
   fragments: string[];
   /** The bit currently being recognised, not yet final. */
   interim: string;
+  /** Live mic loudness, 0–1, so the user can see they are being heard. */
+  level: number;
   start(): void;
   stop(): void;
   clear(): void;
@@ -44,8 +46,16 @@ export interface SpeechInput {
 // Whisper invents these on near-silent clips.
 const HALLUCINATIONS = /^(thank you\.?|thanks( for watching)?\.?|you\.?|bye\.?|\.+)$/i;
 
+// Sensitivity lives here; precision lives in the server's hallucination
+// filter. Err towards hearing a quiet person — a dropped syllable costs more
+// than a junk clip that Whisper's confidence score throws away.
 const SILENCE_MS = 700;
-const MIN_BURST_MS = 400;
+const MIN_BURST_MS = 250;
+const MIN_THRESHOLD = 0.008;
+const FLOOR_MULTIPLIER = 2.5;
+// Once speaking, stay speaking down to this fraction of the trigger level, so
+// trailing soft syllables are not cut off.
+const HOLD_RATIO = 0.5;
 const MAX_BURST_MS = 9000;
 const IDLE_RESTART_MS = 6000;
 
@@ -66,6 +76,7 @@ export function useSpeechInput(mode: SpeechMode): SpeechInput {
   const [listening, setListening] = useState(false);
   const [fragments, setFragments] = useState<string[]>([]);
   const [interim, setInterim] = useState("");
+  const [level, setLevel] = useState(0);
 
   const wantListening = useRef(false);
   const muted = useRef(false);
@@ -101,6 +112,7 @@ export function useSpeechInput(mode: SpeechMode): SpeechInput {
     teardownServer();
     setListening(false);
     setInterim("");
+    setLevel(0);
   }, [teardownServer]);
 
   const startBrowser = useCallback(() => {
@@ -174,9 +186,10 @@ export function useSpeechInput(mode: SpeechMode): SpeechInput {
 
     let burstStart = 0;
     let lastVoice = 0;
+    let lastLevelAt = 0;
     let recorderStart = 0;
     let speaking = false;
-    let noiseFloor = 0.01;
+    let noiseFloor = 0.005;
     // Each recorder owns its chunks and its keep flag; stop() delivers data
     // asynchronously, after the next recorder has already started.
     let current: { r: MediaRecorder; chunks: Blob[]; keep: boolean } | null = null;
@@ -233,8 +246,13 @@ export function useSpeechInput(mode: SpeechMode): SpeechInput {
       }
 
       noiseFloor = speaking ? noiseFloor : Math.min(0.05, noiseFloor * 0.98 + rms * 0.02);
-      const threshold = Math.max(0.02, noiseFloor * 4);
-      const voiced = rms > threshold;
+      const threshold = Math.max(MIN_THRESHOLD, noiseFloor * FLOOR_MULTIPLIER);
+      const voiced = rms > (speaking ? threshold * HOLD_RATIO : threshold);
+
+      if (now - lastLevelAt > 80) {
+        lastLevelAt = now;
+        setLevel(Math.min(1, rms / 0.08));
+      }
 
       if (voiced) {
         if (!speaking) { speaking = true; burstStart = now; setInterim("listening"); }
@@ -277,5 +295,5 @@ export function useSpeechInput(mode: SpeechMode): SpeechInput {
       ? typeof MediaRecorder !== "undefined" && Boolean(navigator.mediaDevices?.getUserMedia)
       : Boolean(getRecognizer());
 
-  return { supported, mode, listening, fragments, interim, start, stop, clear, addFragment, setMuted };
+  return { supported, mode, listening, fragments, interim, level, start, stop, clear, addFragment, setMuted };
 }

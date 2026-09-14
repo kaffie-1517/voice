@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 import type { SpeechInput } from "../hooks/useSpeechInput";
 import type { InputSignal } from "../types";
 
@@ -43,6 +43,7 @@ export function InputBar({ speech, keywords, onTyped, onClear }: Props) {
       <div className="controls">
         <button
           className={`mic${speech.listening ? " on" : ""}`}
+          style={{ "--level": speech.level } as CSSProperties}
           onClick={speech.listening ? speech.stop : speech.start}
           disabled={!speech.supported}
           aria-pressed={speech.listening}

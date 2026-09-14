@@ -8,6 +8,8 @@ fully exercised here, for free, and deterministically enough to rehearse a demo.
 
 from __future__ import annotations
 
+import asyncio
+
 from .config import settings
 from .prompts import build_partner_system_prompt, build_partner_user_prompt
 from .providers import load_model
@@ -40,10 +42,14 @@ async def partner_reply(req: CallReplyRequest) -> CallReplyResponse:
             system_prompt=build_partner_system_prompt(scenario),
             tools=[],
             callback_handler=None,
+            retry_strategy=None,
         )
-        result = await agent.invoke_async(
-            build_partner_user_prompt(req.transcript),
-            structured_output_model=PartnerReply,
+        result = await asyncio.wait_for(
+            agent.invoke_async(
+                build_partner_user_prompt(req.transcript),
+                structured_output_model=PartnerReply,
+            ),
+            timeout=8.0,
         )
         reply = result.structured_output
         if reply is None or not reply.text.strip():

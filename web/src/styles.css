@@ -367,18 +367,17 @@ button:focus-visible, [tabindex]:focus-visible {
 
 .mic.on svg { fill: #1a1206; }
 
+/* Live loudness ring: grows with the mic level so a quiet speaker can see
+   they are being heard, without having to speak up. */
 .mic.on::after {
   content: "";
   position: absolute;
-  inset: -8px;
+  inset: -6px;
   border-radius: 50%;
-  border: 2px solid var(--self);
-  animation: pulse 1.4s ease-out infinite;
-}
-
-@keyframes pulse {
-  from { transform: scale(0.9); opacity: 0.8; }
-  to   { transform: scale(1.35); opacity: 0; }
+  border: 3px solid var(--self);
+  opacity: calc(0.25 + var(--level, 0) * 0.75);
+  transform: scale(calc(1 + var(--level, 0) * 0.45));
+  transition: transform 0.08s linear, opacity 0.08s linear;
 }
 
 .mic:disabled { opacity: 0.4; cursor: not-allowed; }

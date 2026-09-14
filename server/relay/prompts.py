@@ -55,14 +55,14 @@ def build_predict_system_prompt(
 ) -> str:
     learned_block = ""
     if learned_phrases:
-        recent = "\n".join(f"  - {p}" for p in learned_phrases[:12])
+        recent = "\n".join(f"  - {p}" for p in learned_phrases[:8])
         learned_block = (
-            "\n\n## What she has actually chosen before\n"
-            "These are utterances she picked in past sessions — the ones most "
-            "related to this moment first, then the most recent. They are the "
-            "strongest available signal for how she phrases things. Use them for "
-            "wording and names — never to decide the topic over what she is "
-            "saying right now.\n"
+            "\n\n## Things she has said before that relate to this moment\n"
+            "Utterances she chose in past conversations that share words with "
+            "what is being said now. They show how she phrases this kind of "
+            "thing. They are NOT facts about today: a past sentence does not "
+            "mean she has that problem, plan or feeling now. Borrow the wording; "
+            "never import the situation.\n"
             f"{recent}"
         )
 

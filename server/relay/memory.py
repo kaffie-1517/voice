@@ -199,13 +199,8 @@ memory: Phrasebook = _open_phrasebook()
 
 
 async def learned_phrases(query: str) -> list[str]:
-    """What to show the predictor: relevant first, then recent, de-duplicated."""
-    relevant = await asyncio.to_thread(memory.relevant_choices, query)
-    recent = memory.recent_choices()
-    seen: set[str] = set()
-    out: list[str] = []
-    for text in relevant + recent:
-        if text not in seen:
-            seen.add(text)
-            out.append(text)
-    return out[:12]
+    """What to show the predictor: only past choices that relate to this
+    moment. Unrelated recent choices are left out on purpose — a sentence she
+    said in another conversation is a topic she is not raising now, and the
+    model will happily raise it for her."""
+    return await asyncio.to_thread(memory.relevant_choices, query, 8)

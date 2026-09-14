@@ -83,8 +83,12 @@ def _build_openai(
 
     from strands.models.openai import OpenAIModel
 
+    client_args: dict[str, Any] = {"api_key": os.environ["OPENAI_API_KEY"]}
+    if force_tool:
+        client_args["max_retries"] = 0
+        client_args["timeout"] = 8.0
     return OpenAIModel(
-        client_args={"api_key": os.environ["OPENAI_API_KEY"]},
+        client_args=client_args,
         model_id=model_id,
         params=_openai_params(model_id, temperature, max_tokens, force_tool),
     )
@@ -99,11 +103,17 @@ def _build_groq(
 
     from strands.models.openai import OpenAIModel
 
+    client_args: dict[str, Any] = {
+        "api_key": os.environ["GROQ_API_KEY"],
+        "base_url": "https://api.groq.com/openai/v1",
+    }
+    if force_tool:
+        # Latency-critical tier: a throttled provider must fail straight
+        # through to the offline engine, not be retried by the HTTP client.
+        client_args["max_retries"] = 0
+        client_args["timeout"] = 8.0
     return OpenAIModel(
-        client_args={
-            "api_key": os.environ["GROQ_API_KEY"],
-            "base_url": "https://api.groq.com/openai/v1",
-        },
+        client_args=client_args,
         model_id=model_id,
         params=_openai_params(model_id, temperature, max_tokens, force_tool),
     )

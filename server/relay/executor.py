@@ -17,6 +17,7 @@ from collections import defaultdict
 from typing import Any
 
 from strands import Agent, tool
+from strands.event_loop._retry import ModelRetryStrategy
 from strands.types.tools import ToolContext
 
 from .config import settings
@@ -162,6 +163,8 @@ async def execute(text: str, action: ActionSpec | None, session_id: str) -> Comm
             system_prompt=EXECUTOR_SYSTEM_PROMPT,
             tools=TOOLS,
             callback_handler=None,
+            # One quick retry, not Strands' default six with minutes of backoff.
+            retry_strategy=ModelRetryStrategy(max_attempts=2, initial_delay=2, max_delay=2),
         )
         result = await agent.invoke_async(
             intent, invocation_state={"session_id": session_id}

@@ -8,6 +8,7 @@ guarantee here without the round trips an agentic loop would add.
 
 from __future__ import annotations
 
+import asyncio
 import time
 import uuid
 
@@ -24,6 +25,10 @@ from .schemas import (
     PredictResponse,
 )
 from .scripted import scripted_predict
+
+# Someone is on the line. Past this, an offline guess beats a perfect one, and
+# a provider that is throttling us must not be retried into a two-minute wait.
+PREDICT_DEADLINE_S = 8.0
 
 
 def _to_candidates(prediction: PredictionSet, count: int) -> list[Candidate]:
@@ -115,10 +120,14 @@ async def predict(req: PredictRequest) -> PredictResponse:
             # Strands prints streamed tokens to stdout by default; silence it,
             # this is a server.
             callback_handler=None,
+            retry_strategy=None,
         )
-        result = await agent.invoke_async(
-            build_predict_user_prompt(req),
-            structured_output_model=PredictionSet,
+        result = await asyncio.wait_for(
+            agent.invoke_async(
+                build_predict_user_prompt(req),
+                structured_output_model=PredictionSet,
+            ),
+            timeout=PREDICT_DEADLINE_S,
         )
         prediction = result.structured_output
         if prediction is None or not prediction.utterances:
