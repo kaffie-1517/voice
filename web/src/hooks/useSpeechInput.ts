@@ -45,7 +45,7 @@ export interface SpeechInput {
 const HALLUCINATIONS = /^(thank you\.?|thanks( for watching)?\.?|you\.?|bye\.?|\.+)$/i;
 
 const SILENCE_MS = 700;
-const MIN_BURST_MS = 250;
+const MIN_BURST_MS = 400;
 const MAX_BURST_MS = 9000;
 const IDLE_RESTART_MS = 6000;
 
@@ -233,7 +233,7 @@ export function useSpeechInput(mode: SpeechMode): SpeechInput {
       }
 
       noiseFloor = speaking ? noiseFloor : Math.min(0.05, noiseFloor * 0.98 + rms * 0.02);
-      const threshold = Math.max(0.012, noiseFloor * 3);
+      const threshold = Math.max(0.02, noiseFloor * 4);
       const voiced = rms > threshold;
 
       if (voiced) {

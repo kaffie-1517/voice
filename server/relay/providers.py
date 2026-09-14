@@ -63,6 +63,10 @@ def _openai_params(
     # latency the user feels mid-sentence, so keep it minimal.
     if "gpt-oss" in model_id:
         params["reasoning_effort"] = "low" if temperature is not None else "medium"
+    elif "qwen" in model_id:
+        # Qwen thinks at length before a tool call and blows the token budget;
+        # the prediction tier does not need it.
+        params["reasoning_effort"] = "none" if temperature is not None else "default"
     # Strands only forces the structured-output tool on a *second* round trip,
     # after the model has answered in prose once. On the prediction loop that
     # doubles latency, so force it from the first request. `params` is merged

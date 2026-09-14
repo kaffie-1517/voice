@@ -47,13 +47,48 @@ def tts_available() -> bool:
 
 
 def _vocabulary_hint() -> str:
-    names = ", ".join(c.name for c in demo_profile.contacts)
-    meds = ", ".join(demo_profile.medications)
-    return (
-        f"Broken fragments of speech from {demo_profile.name}, who has aphasia. "
-        f"Transcribe exactly what is said, even single syllables. Names: {names}. "
-        f"Medications: {meds}."
-    )
+    # Whisper's prompt is best used as a bare glossary, not instructions — long
+    # prose gets echoed back verbatim on near-silent clips.
+    terms = [c.name for c in demo_profile.contacts] + demo_profile.medications
+    return ", ".join(terms) + "."
+
+
+_HINT_WORDS = {w.strip(".,").lower() for w in _vocabulary_hint().split()}
+
+# Whisper's per-segment signals for "I made this up". Groq reports
+# no_speech_prob as 0 even on pure noise, so avg_logprob does the work:
+# measured -0.18 on real fragments, -0.59 on a noise-only clip.
+NO_SPEECH_MAX = 0.5
+LOGPROB_MIN = -0.6
+LOGPROB_WEAK = -0.35
+COMPRESSION_MAX = 2.4
+
+
+def _clean(segments: list[Any], text: str) -> str:
+    kept: list[str] = []
+    worst_logprob = 0.0
+    for seg in segments:
+        get = seg.get if isinstance(seg, dict) else lambda k, d=None: getattr(seg, k, d)
+        logprob = float(get("avg_logprob", 0) or 0)
+        if float(get("no_speech_prob", 0) or 0) > NO_SPEECH_MAX:
+            continue
+        if logprob < LOGPROB_MIN:
+            continue
+        if float(get("compression_ratio", 0) or 0) > COMPRESSION_MAX:
+            continue
+        worst_logprob = min(worst_logprob, logprob)
+        kept.append(str(get("text", "") or "").strip())
+    out = " ".join(t for t in kept if t).strip() if segments else text.strip()
+
+    words = [w.strip(".,!?").lower() for w in out.split()]
+    if not words or all(not any(ch.isalpha() for ch in w) for w in words):
+        return ""  # digits and punctuation only — silence hallucination
+    glossary_share = sum(w in _HINT_WORDS for w in words) / len(words)
+    if len(words) >= 3 and glossary_share > 0.6:
+        return ""  # echoing the glossary back
+    if glossary_share == 1.0 and worst_logprob < LOGPROB_WEAK:
+        return ""  # a lone glossary word, weakly held — noise wearing a name
+    return out
 
 
 async def transcribe(audio: bytes, filename: str) -> str | None:
@@ -67,10 +102,10 @@ async def transcribe(audio: bytes, filename: str) -> str | None:
             file=(filename, audio),
             language="en",
             prompt=_vocabulary_hint(),
-            response_format="json",
+            response_format="verbose_json",
             temperature=0,
         )
-        return str(result.text or "").strip()
+        return _clean(list(getattr(result, "segments", None) or []), str(result.text or ""))
 
     try:
         return await asyncio.to_thread(call)

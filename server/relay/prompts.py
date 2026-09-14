@@ -60,8 +60,9 @@ def build_predict_system_prompt(
             "\n\n## What she has actually chosen before\n"
             "These are utterances she picked in past sessions — the ones most "
             "related to this moment first, then the most recent. They are the "
-            "strongest available signal for her real phrasing and current "
-            "concerns. Prefer this vocabulary when it fits.\n"
+            "strongest available signal for how she phrases things. Use them for "
+            "wording and names — never to decide the topic over what she is "
+            "saying right now.\n"
             f"{recent}"
         )
 
@@ -83,12 +84,10 @@ that is stuck on the way out.
 
 ## What you receive
 - FRAGMENTS — whatever made it out of her mouth, however broken, as heard by a \
-speech recogniser. The recogniser is listening to impaired speech and often \
-mis-hears: it may swap a word for one that sounds similar ("fluff coat" for \
-"frock coat", "chin" for "Chen"), or force a fluent phrase out of noise. Treat \
-fragments as SOUND-ALIKE EVIDENCE of what she meant, not as literal words. \
-Match them against the names, places and concerns in her profile and the \
-conversation first.
+speech recogniser. A fragment that is a real, recognisable word is what she \
+said — build on it. A fragment that is not a real word, or is one syllable off \
+a name in her life ("chin" for "Chen", "nadya" for "Nadia"), is probably a \
+mis-hearing; resolve it using her profile and the conversation.
 - TAPPED — concepts she selected from her board when speech failed entirely. \
 These are exact and deliberate; weight them above fragments.
 - SITUATION — the channel, who she is talking to, and what has been said so far
@@ -97,6 +96,13 @@ These are exact and deliberate; weight them above fragments.
 Complete utterances, in FIRST PERSON, exactly as she would say them aloud.
 
 ## The rules that matter
+
+0. HER WORDS WIN. If she clearly said a word — above all if she said it more \
+than once — the top candidate uses that word, even when it does not fit the \
+situation you expected. She said "toothpaste" to a clinic receptionist? Then \
+the first candidate is about toothpaste. Her profile explains unclear \
+fragments; it never overrules clear ones. Do not replace what she said with \
+what someone in her situation would usually say.
 
 1. NEVER INVENT FACTS. This is the one that causes real harm. "tues" may become
    "Tuesday". It must NOT become "Tuesday at 3pm" unless a time appears in the
@@ -142,6 +148,28 @@ is explicitly asking to set, a document she is asking to send. Never attach an
 action she did not ask for."""
 
 
+_FILLER = {
+    "i", "um", "uh", "the", "a", "an", "and", "to", "of", "it", "is", "my", "me",
+    "yes", "no", "so", "like", "please", "okay", "ok", "oh", "well", "just",
+}
+
+
+def anchor_words(req: PredictRequest) -> list[str]:
+    """Content words she clearly produced — tapped, typed, or spoken as real
+    words of some length — most repeated first. These must survive into the
+    candidates. A word said twice is almost never a mis-hearing."""
+    counts: dict[str, int] = {}
+    for s in req.signals:
+        for raw in s.text.split():
+            w = raw.strip(".,!?…\"'").lower()
+            if not w or w in _FILLER or not w.isalpha():
+                continue
+            if s.kind == "speech" and len(w) < 4:
+                continue  # too short to trust the recogniser on
+            counts[w] = counts.get(w, 0) + (1 if s.kind == "speech" else 2)
+    return sorted(counts, key=lambda w: -counts[w])
+
+
 def build_predict_user_prompt(req: PredictRequest) -> str:
     spoken = [s.text for s in req.signals if s.kind == "speech"]
     tapped = [s.text for s in req.signals if s.kind == "keyword"]
@@ -157,6 +185,17 @@ def build_predict_user_prompt(req: PredictRequest) -> str:
         lines.append(f"TYPED: {' '.join(typed)}")
     if not lines:
         lines.append("FRAGMENTS: (nothing yet — she has only opened her mouth)")
+
+    anchors = anchor_words(req)
+    if anchors:
+        lines.append(
+            f"CONTENT WORDS HEARD: {', '.join(anchors)}. Candidate 1 must be a "
+            "natural sentence about what the real words among these mean — the "
+            "thing she wants, needs or is telling them — not the usual request "
+            "for this situation with the word bolted on. Anything that is not an "
+            "English word is a mis-hearing: resolve it to a name in her life if one "
+            "sounds close, otherwise leave it out."
+        )
 
     lines.append("")
     lines.append(f"SITUATION: {CHANNEL_GUIDANCE[req.channel]}")

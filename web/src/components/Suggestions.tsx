@@ -28,7 +28,7 @@ export function Suggestions({ candidates, loading, onPick, emptyHint }: Props) {
     return (
       <>
         {loading && <div className="thinking" aria-hidden />}
-        <div className="suggestions-empty">{loading ? "Listening…" : emptyHint}</div>
+        <div className="suggestions-empty">{loading ? "Thinking…" : emptyHint}</div>
       </>
     );
   }

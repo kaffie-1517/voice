@@ -14,7 +14,7 @@ import uuid
 from .config import settings
 from .memory import learned_phrases
 from .profile import demo_profile
-from .prompts import build_predict_system_prompt, build_predict_user_prompt
+from .prompts import anchor_words, build_predict_system_prompt, build_predict_user_prompt
 from .providers import load_model
 from .schemas import (
     ActionSpec,
@@ -50,6 +50,39 @@ def _to_candidates(prediction: PredictionSet, count: int) -> list[Candidate]:
     return candidates
 
 
+def _honour_her_words(candidates: list[Candidate], req: PredictRequest) -> list[Candidate]:
+    """A word she clearly said must be on screen. Models drift towards what a
+    caller in her situation usually wants; this keeps what she actually said
+    at the top, and puts it there verbatim if the model dropped it entirely."""
+    anchors = anchor_words(req)
+    if not anchors or not candidates:
+        return candidates
+
+    def uses_anchor(c: Candidate) -> bool:
+        text = c.text.lower()
+        return any(a in text for a in anchors)
+
+    hits = [c for c in candidates if uses_anchor(c)]
+    if hits:
+        top = max(c.confidence for c in candidates)
+        hits[0].confidence = max(hits[0].confidence, top)
+        return hits + [c for c in candidates if not uses_anchor(c)]
+
+    # The model dropped her word entirely. Say it back plainly — the most
+    # repeated word only, since a one-off is the likeliest mis-hearing.
+    literal = anchors[0].capitalize() + "."
+    return [
+        Candidate(
+            id=uuid.uuid4().hex[:8],
+            text=literal,
+            gist="As said",
+            confidence=0.5,
+            action=None,
+        ),
+        *candidates[: max(0, req.count - 1)],
+    ]
+
+
 async def predict(req: PredictRequest) -> PredictResponse:
     started = time.perf_counter()
 
@@ -59,7 +92,9 @@ async def predict(req: PredictRequest) -> PredictResponse:
     model = load_model("fast", PredictionSet)
     if model is None:
         return PredictResponse(
-            candidates=_to_candidates(scripted_predict(req), req.count),
+            candidates=_honour_her_words(
+                _to_candidates(scripted_predict(req), req.count), req
+            ),
             latency_ms=elapsed(),
             source="scripted",
             degraded=False,
@@ -94,7 +129,7 @@ async def predict(req: PredictRequest) -> PredictResponse:
             raise ValueError("no usable candidates after cleaning")
 
         return PredictResponse(
-            candidates=candidates,
+            candidates=_honour_her_words(candidates, req),
             latency_ms=elapsed(),
             source=settings.provider,  # type: ignore[arg-type]
             degraded=False,
@@ -104,7 +139,9 @@ async def predict(req: PredictRequest) -> PredictResponse:
         # Never leave the screen empty. Someone is mid-sentence.
         print(f"[relay] prediction fell back to scripted: {exc}")
         return PredictResponse(
-            candidates=_to_candidates(scripted_predict(req), req.count),
+            candidates=_honour_her_words(
+                _to_candidates(scripted_predict(req), req.count), req
+            ),
             latency_ms=elapsed(),
             source="scripted",
             degraded=True,

@@ -21,9 +21,11 @@ export interface PredictorState {
 }
 
 /**
- * Debounced, cancellable prediction. Fires on any change to the inputs;
- * in-flight requests are aborted when a newer one supersedes them, so the
- * screen never shows suggestions for a sentence she has already moved past.
+ * Debounced prediction, latest wins. Fires on any change to the inputs. An
+ * in-flight request is allowed to finish and show its result — fragments can
+ * arrive faster than a prediction takes, and aborting each time meant nothing
+ * ever landed. A newer request's result simply replaces an older one; an
+ * older result arriving late is dropped.
  */
 export function usePredictor(opts: Options): PredictorState {
   const { signals, channel, partner, transcript, eager = false, debounceMs = 420 } = opts;
@@ -34,7 +36,8 @@ export function usePredictor(opts: Options): PredictorState {
     source: null,
     degraded: false,
   });
-  const abort = useRef<AbortController | null>(null);
+  const seq = useRef(0);
+  const applied = useRef(0);
 
   const signalKey = signals.map((s) => `${s.kind}:${s.text}`).join("|");
   const lastTurn = transcript?.[transcript.length - 1];
@@ -43,33 +46,33 @@ export function usePredictor(opts: Options): PredictorState {
   useEffect(() => {
     const shouldRun = signals.length > 0 || (eager && lastTurn?.speaker === "partner");
     if (!shouldRun) {
-      abort.current?.abort();
+      applied.current = ++seq.current;
       setState((s) => ({ ...s, candidates: [], loading: false }));
       return;
     }
 
     const timer = setTimeout(() => {
-      abort.current?.abort();
-      const ctrl = new AbortController();
-      abort.current = ctrl;
+      const mine = ++seq.current;
       setState((s) => ({ ...s, loading: true }));
 
       api
-        .predict({ signals, channel, partner, transcript, count: 4 }, ctrl.signal)
+        .predict({ signals, channel, partner, transcript, count: 4 })
         .then((res) => {
-          if (ctrl.signal.aborted) return;
+          if (mine < applied.current) return;
+          applied.current = mine;
           setState({
             candidates: res.candidates,
-            loading: false,
+            loading: mine < seq.current,
             latencyMs: res.latency_ms,
             source: res.source,
             degraded: res.degraded,
           });
         })
         .catch((err: unknown) => {
-          if (ctrl.signal.aborted) return;
+          if (mine < applied.current) return;
+          applied.current = mine;
           console.warn("predict failed", err);
-          setState((s) => ({ ...s, loading: false, degraded: true }));
+          setState((s) => ({ ...s, loading: mine < seq.current, degraded: true }));
         });
     }, debounceMs);
 
