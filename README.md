@@ -107,6 +107,24 @@ python scripts/create_memory.py
 Paste the printed id into `AGENTCORE_MEMORY_ID`. The local JSON store is used
 until then, and again if AgentCore is unreachable — memory never blocks speech.
 
+### Relay in Telegram (free)
+
+1. Message **@BotFather** → `/newbot` → paste the token into `TELEGRAM_BOT_TOKEN`.
+2. In BotFather: `/setinline` (any placeholder), then `/setinlinefeedback` → Enabled.
+3. Restart the server. It long-polls; no public URL needed.
+
+Then, on phones:
+
+- Maya's phone: open the bot, send `/me`. Send a voice note — replies appear
+  as buttons.
+- A family member's phone: open the bot, send `/link Sam`. Whatever they send
+  (text or voice) arrives on Maya's phone with reply candidates; she taps one
+  and it is delivered to them.
+- In **any** chat, type `@YourBot om tues` — the candidates pop up and the one
+  she taps is sent as her own message.
+- "Send my scan to Dr. Chen" runs the Strands executor, whose `send_document`
+  tool posts a PDF into the linked Dr. Chen chat.
+
 ## Demo script (≈3 min)
 
 1. **Call → Book an appointment.** The receptionist answers. Say "doc… Tues…"

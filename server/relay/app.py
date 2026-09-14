@@ -33,6 +33,7 @@ from .schemas import (
     UserProfile,
 )
 from .speech import stt_available, synthesize, transcribe, tts_available
+from . import telegram
 
 
 # Strands warns on every tool-loop turn that OpenAI-compatible endpoints drop
@@ -48,7 +49,10 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         asyncio.create_task(
             predict(PredictRequest(signals=[InputSignal(kind="speech", text="hello")]))
         )
+    bot = asyncio.create_task(telegram.run()) if telegram.available() else None
     yield
+    if bot:
+        bot.cancel()
 
 
 app = FastAPI(title="Relay", version="0.1.0", lifespan=lifespan)
@@ -71,6 +75,7 @@ async def health() -> HealthResponse:
         scripted_fallback=settings.provider == "scripted",
         stt=stt_available(),
         tts=tts_available(),
+        telegram=telegram.available(),
     )
 
 

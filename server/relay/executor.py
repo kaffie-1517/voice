@@ -5,9 +5,10 @@ committed to an utterance like "Send my last scan to Dr. Chen and remind me
 Tuesday", something has to decide which tools to call, in what order, with what
 arguments. That is a model-driven tool loop, which is exactly what Strands is for.
 
-The tools here simulate their effects and return receipts. Swapping any one of
-them for a real integration is a change inside a single function — the agent,
-the prompt, and the UI are untouched.
+send_message and send_document deliver for real when the recipient is linked
+on Telegram; everything else simulates its effect and returns a receipt.
+Swapping a tool for a real integration is a change inside that one function —
+the agent, the prompt, and the UI are untouched.
 """
 
 from __future__ import annotations
@@ -74,8 +75,11 @@ def send_document(recipient: str, document: str, tool_context: ToolContext) -> s
     Returns:
         A confirmation describing what was sent and to whom.
     """
+    from .telegram import deliver_document
+
     who = _resolve_contact(recipient)
-    return activity.add(_session_of(tool_context), "document", f"Sent {document} to {who}.")
+    via = " on Telegram" if deliver_document(who, document) else ""
+    return activity.add(_session_of(tool_context), "document", f"Sent {document} to {who}{via}.")
 
 
 @tool(context=True)
@@ -105,8 +109,11 @@ def send_message(recipient: str, body: str, tool_context: ToolContext) -> str:
     Returns:
         A confirmation of the message that was sent.
     """
+    from .telegram import deliver_message
+
     who = _resolve_contact(recipient)
-    return activity.add(_session_of(tool_context), "message", f'Message to {who}: "{body}"')
+    via = " on Telegram" if deliver_message(who, body) else ""
+    return activity.add(_session_of(tool_context), "message", f'Message to {who}{via}: "{body}"')
 
 
 @tool(context=True)

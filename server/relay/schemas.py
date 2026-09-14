@@ -183,6 +183,7 @@ class HealthResponse(BaseModel):
     scripted_fallback: bool
     stt: bool = False
     tts: bool = False
+    telegram: bool = False
 
 
 class TranscribeResponse(BaseModel):

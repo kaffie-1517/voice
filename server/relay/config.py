@@ -68,6 +68,7 @@ class Settings:
     agentcore_memory_id: str
     agentcore_actor_id: str
     memory_path: str
+    telegram_bot_token: str
     port: int
 
     @property
@@ -111,5 +112,6 @@ settings = Settings(
     agentcore_memory_id=os.environ.get("AGENTCORE_MEMORY_ID", ""),
     agentcore_actor_id=os.environ.get("AGENTCORE_ACTOR_ID", "maya"),
     memory_path=os.environ.get("RELAY_MEMORY_PATH", ".relay-memory.json"),
+    telegram_bot_token=os.environ.get("TELEGRAM_BOT_TOKEN", "").strip(),
     port=int(os.environ.get("PORT", "8787")),
 )
