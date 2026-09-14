@@ -27,7 +27,7 @@ async def partner_reply(req: CallReplyRequest) -> CallReplyResponse:
             text=scenario.opening, ended=False, source=settings.provider  # type: ignore[arg-type]
         )
 
-    model = load_model("fast")
+    model = load_model("fast", PartnerReply)
     if model is None:
         text, ended = scripted_partner_reply(req.scenario_id, req.transcript)
         return CallReplyResponse(text=text, ended=ended, source="scripted")
@@ -51,7 +51,7 @@ async def partner_reply(req: CallReplyRequest) -> CallReplyResponse:
 
         return CallReplyResponse(
             text=reply.text.strip(),
-            ended=reply.ended,
+            ended=bool(reply.ended),
             source=settings.provider,  # type: ignore[arg-type]
         )
     except Exception as exc:

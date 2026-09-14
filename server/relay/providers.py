@@ -15,6 +15,8 @@ from __future__ import annotations
 import functools
 from typing import Any
 
+from pydantic import BaseModel
+
 from .config import settings
 
 # Claude 4.6+ removed temperature/top_p/top_k; sending them returns a 400.
@@ -51,30 +53,73 @@ def _build_anthropic(model_id: str, temperature: float | None, max_tokens: int) 
     )
 
 
-def _build_openai(model_id: str, temperature: float | None, max_tokens: int) -> Any:
+def _openai_params(
+    model_id: str, temperature: float | None, max_tokens: int, force_tool: str | None
+) -> dict[str, Any]:
+    params: dict[str, Any] = {"max_tokens": max_tokens}
+    if temperature is not None:
+        params["temperature"] = temperature
+    # gpt-oss models reason before answering; on the fast tier that reasoning is
+    # latency the user feels mid-sentence, so keep it minimal.
+    if "gpt-oss" in model_id:
+        params["reasoning_effort"] = "low" if temperature is not None else "medium"
+    # Strands only forces the structured-output tool on a *second* round trip,
+    # after the model has answered in prose once. On the prediction loop that
+    # doubles latency, so force it from the first request. `params` is merged
+    # last into the request, which is what lets this override Strands' choice.
+    if force_tool:
+        params["tool_choice"] = {"type": "function", "function": {"name": force_tool}}
+    return params
+
+
+def _build_openai(
+    model_id: str, temperature: float | None, max_tokens: int, force_tool: str | None
+) -> Any:
     import os
 
     from strands.models.openai import OpenAIModel
 
-    params: dict[str, Any] = {"max_tokens": max_tokens}
-    if temperature is not None:
-        params["temperature"] = temperature
     return OpenAIModel(
         client_args={"api_key": os.environ["OPENAI_API_KEY"]},
         model_id=model_id,
-        params=params,
+        params=_openai_params(model_id, temperature, max_tokens, force_tool),
     )
 
 
-@functools.lru_cache(maxsize=4)
-def load_model(tier: str) -> Any | None:
+def _build_groq(
+    model_id: str, temperature: float | None, max_tokens: int, force_tool: str | None
+) -> Any:
+    """Groq speaks the OpenAI wire protocol, so Strands' OpenAIModel with a
+    different base_url is the whole integration."""
+    import os
+
+    from strands.models.openai import OpenAIModel
+
+    return OpenAIModel(
+        client_args={
+            "api_key": os.environ["GROQ_API_KEY"],
+            "base_url": "https://api.groq.com/openai/v1",
+        },
+        model_id=model_id,
+        params=_openai_params(model_id, temperature, max_tokens, force_tool),
+    )
+
+
+@functools.lru_cache(maxsize=8)
+def load_model(tier: str, structured: type[BaseModel] | None = None) -> Any | None:
     """Return a Strands model for 'fast' or 'smart', or None in scripted mode.
+
+    Pass the Pydantic model an agent will be constrained to when the agent does
+    nothing but structured output; providers that can force the tool from the
+    first request will. Leave it out for real tool-using agents.
 
     Cached because model objects hold a provider client; rebuilding one per
     request would add a connection setup to the latency budget.
     """
     if settings.provider == "scripted":
         return None
+
+    force_tool = structured.__name__ if structured else None
 
     if tier == "fast":
         model_id = settings.fast_model
@@ -93,7 +138,9 @@ def load_model(tier: str) -> Any | None:
         if settings.provider == "anthropic":
             return _build_anthropic(model_id, temperature, max_tokens)
         if settings.provider == "openai":
-            return _build_openai(model_id, temperature, max_tokens)
+            return _build_openai(model_id, temperature, max_tokens, force_tool)
+        if settings.provider == "groq":
+            return _build_groq(model_id, temperature, max_tokens, force_tool)
     except Exception as exc:  # missing extra, bad credentials, unknown model id
         print(f"[relay] could not build {tier} model ({model_id}): {exc}")
         return None

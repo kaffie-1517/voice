@@ -13,9 +13,11 @@ the prompt, and the UI are untouched.
 from __future__ import annotations
 
 import time
+from collections import defaultdict
 from typing import Any
 
 from strands import Agent, tool
+from strands.types.tools import ToolContext
 
 from .config import settings
 from .profile import demo_profile
@@ -23,15 +25,30 @@ from .prompts import EXECUTOR_SYSTEM_PROMPT
 from .providers import load_model
 from .schemas import ActionSpec, CommitResponse
 
-# Everything the agent did this session, surfaced in the UI so the user can see
-# that saying the sentence actually caused something to happen.
-activity_log: list[dict[str, Any]] = []
+
+class ActivityLog:
+    """What the agent did, per client session, so the user can see that saying
+    the sentence actually caused something to happen — and only their own."""
+
+    def __init__(self, keep: int = 200) -> None:
+        self._keep = keep
+        self._by_session: dict[str, list[dict[str, Any]]] = defaultdict(list)
+
+    def add(self, session_id: str, kind: str, detail: str) -> str:
+        entries = self._by_session[session_id]
+        entries.append({"kind": kind, "detail": detail, "at": int(time.time())})
+        del entries[: -self._keep]
+        return detail
+
+    def entries(self, session_id: str, limit: int = 30) -> list[dict[str, Any]]:
+        return list(reversed(self._by_session.get(session_id, [])[-limit:]))
 
 
-def _log(kind: str, detail: str) -> str:
-    entry = {"kind": kind, "detail": detail, "at": int(time.time())}
-    activity_log.append(entry)
-    return detail
+activity = ActivityLog()
+
+
+def _session_of(ctx: ToolContext) -> str:
+    return str(ctx.invocation_state.get("session_id", "anonymous"))
 
 
 def _resolve_contact(name: str) -> str:
@@ -45,8 +62,8 @@ def _resolve_contact(name: str) -> str:
     return name
 
 
-@tool
-def send_document(recipient: str, document: str) -> str:
+@tool(context=True)
+def send_document(recipient: str, document: str, tool_context: ToolContext) -> str:
     """Send a document or medical record to one of the user's contacts.
 
     Args:
@@ -57,11 +74,11 @@ def send_document(recipient: str, document: str) -> str:
         A confirmation describing what was sent and to whom.
     """
     who = _resolve_contact(recipient)
-    return _log("document", f"Sent {document} to {who}.")
+    return activity.add(_session_of(tool_context), "document", f"Sent {document} to {who}.")
 
 
-@tool
-def set_reminder(what: str, when: str) -> str:
+@tool(context=True)
+def set_reminder(what: str, when: str, tool_context: ToolContext) -> str:
     """Set a reminder for the user.
 
     Args:
@@ -71,11 +88,13 @@ def set_reminder(what: str, when: str) -> str:
     Returns:
         A confirmation of the reminder that was set.
     """
-    return _log("reminder", f"Reminder set: {what} — {when}.")
+    return activity.add(
+        _session_of(tool_context), "reminder", f"Reminder set: {what} — {when}."
+    )
 
 
-@tool
-def send_message(recipient: str, body: str) -> str:
+@tool(context=True)
+def send_message(recipient: str, body: str, tool_context: ToolContext) -> str:
     """Send a text message to one of the user's contacts.
 
     Args:
@@ -86,11 +105,11 @@ def send_message(recipient: str, body: str) -> str:
         A confirmation of the message that was sent.
     """
     who = _resolve_contact(recipient)
-    return _log("message", f'Message to {who}: "{body}"')
+    return activity.add(_session_of(tool_context), "message", f'Message to {who}: "{body}"')
 
 
-@tool
-def place_call(contact: str, purpose: str) -> str:
+@tool(context=True)
+def place_call(contact: str, purpose: str, tool_context: ToolContext) -> str:
     """Start an assisted phone call to a contact.
 
     The user does not speak unaided on this call — Relay suggests each reply and
@@ -104,11 +123,11 @@ def place_call(contact: str, purpose: str) -> str:
         A confirmation that the call is being placed.
     """
     who = _resolve_contact(contact)
-    return _log("call", f"Calling {who} — {purpose}.")
+    return activity.add(_session_of(tool_context), "call", f"Calling {who} — {purpose}.")
 
 
-@tool
-def order_item(item: str, vendor: str = "") -> str:
+@tool(context=True)
+def order_item(item: str, tool_context: ToolContext, vendor: str = "") -> str:
     """Order or reorder something on the user's behalf.
 
     Args:
@@ -119,17 +138,17 @@ def order_item(item: str, vendor: str = "") -> str:
         A confirmation of the order that was placed.
     """
     where = f" from {_resolve_contact(vendor)}" if vendor else ""
-    return _log("order", f"Ordered {item}{where}.")
+    return activity.add(_session_of(tool_context), "order", f"Ordered {item}{where}.")
 
 
 TOOLS = [send_document, set_reminder, send_message, place_call, order_item]
 
 
-async def execute(text: str, action: ActionSpec | None) -> CommitResponse:
+async def execute(text: str, action: ActionSpec | None, session_id: str) -> CommitResponse:
     """Run the committed utterance through the action agent."""
     model = load_model("smart")
     if model is None:
-        detail = _log("noted", f'Noted: "{text}"')
+        detail = activity.add(session_id, "noted", f'Noted: "{text}"')
         return CommitResponse(spoken=text, receipt=detail, source="scripted")
 
     intent = f'The person said: "{text}"'
@@ -144,7 +163,9 @@ async def execute(text: str, action: ActionSpec | None) -> CommitResponse:
             tools=TOOLS,
             callback_handler=None,
         )
-        result = await agent.invoke_async(intent)
+        result = await agent.invoke_async(
+            intent, invocation_state={"session_id": session_id}
+        )
         receipt = str(result.message).strip()
         # Strands returns the message as a content-block structure; pull the text.
         if isinstance(result.message, dict):
@@ -159,5 +180,5 @@ async def execute(text: str, action: ActionSpec | None) -> CommitResponse:
         )
     except Exception as exc:
         print(f"[relay] executor failed: {exc}")
-        detail = _log("noted", f'Noted: "{text}"')
+        detail = activity.add(session_id, "noted", f'Noted: "{text}"')
         return CommitResponse(spoken=text, receipt=detail, source="scripted")

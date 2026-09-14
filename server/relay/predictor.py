@@ -12,7 +12,7 @@ import time
 import uuid
 
 from .config import settings
-from .memory import memory
+from .memory import learned_phrases
 from .profile import demo_profile
 from .prompts import build_predict_system_prompt, build_predict_user_prompt
 from .providers import load_model
@@ -33,7 +33,7 @@ def _to_candidates(prediction: PredictionSet, count: int) -> list[Candidate]:
         if not text:
             continue
         action = None
-        if utterance.action_type != "none":
+        if utterance.action_type and utterance.action_type != "none":
             action = ActionSpec(
                 type=utterance.action_type,
                 summary=utterance.action_summary or text,
@@ -56,7 +56,7 @@ async def predict(req: PredictRequest) -> PredictResponse:
     def elapsed() -> int:
         return int((time.perf_counter() - started) * 1000)
 
-    model = load_model("fast")
+    model = load_model("fast", PredictionSet)
     if model is None:
         return PredictResponse(
             candidates=_to_candidates(scripted_predict(req), req.count),
@@ -68,10 +68,13 @@ async def predict(req: PredictRequest) -> PredictResponse:
     try:
         from strands import Agent
 
+        query = " ".join(s.text for s in req.signals)
+        if req.transcript and req.transcript[-1].speaker == "partner":
+            query += " " + req.transcript[-1].text
         agent = Agent(
             model=model,
             system_prompt=build_predict_system_prompt(
-                demo_profile, memory.recent_choices()
+                demo_profile, await learned_phrases(query)
             ),
             tools=[],
             # Strands prints streamed tokens to stdout by default; silence it,

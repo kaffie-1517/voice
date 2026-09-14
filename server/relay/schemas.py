@@ -12,7 +12,7 @@ Channel = Literal["call", "voicenote", "message", "inperson"]
 ActionType = Literal[
     "send_document", "set_reminder", "send_message", "place_call", "order", "none"
 ]
-EngineSource = Literal["bedrock", "anthropic", "openai", "scripted"]
+EngineSource = Literal["bedrock", "anthropic", "openai", "groq", "scripted"]
 
 
 class InputSignal(BaseModel):
@@ -77,14 +77,16 @@ class PredictedUtterance(BaseModel):
     confidence: float = Field(
         ge=0.0, le=1.0, description="0-1. How likely this is what she actually meant."
     )
-    action_type: ActionType = Field(
+    # Both nullable: Strands advertises defaulted fields as nullable in the tool
+    # schema, and models send null. Rejecting that costs a whole retry round trip.
+    action_type: ActionType | None = Field(
         default="none",
         description=(
             "Set only when saying this should also DO something in the world. "
             "Use 'none' for ordinary speech, which is the common case."
         ),
     )
-    action_summary: str = Field(
+    action_summary: str | None = Field(
         default="",
         description="If action_type is not 'none', one plain line describing the action.",
     )
@@ -102,7 +104,7 @@ class PartnerReply(BaseModel):
     """One turn from the simulated person on the other end of the line."""
 
     text: str = Field(description="What they say next. One or two sentences, natural.")
-    ended: bool = Field(
+    ended: bool | None = Field(
         default=False, description="True only if the call has reached a natural goodbye."
     )
 

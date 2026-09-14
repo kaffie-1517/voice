@@ -9,7 +9,7 @@ export type ActionType =
   | "place_call"
   | "order"
   | "none";
-export type EngineSource = "bedrock" | "anthropic" | "openai" | "scripted";
+export type EngineSource = "bedrock" | "anthropic" | "openai" | "groq" | "scripted";
 
 export interface InputSignal {
   kind: InputKind;

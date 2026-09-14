@@ -13,6 +13,7 @@ const PROVIDER_LABEL: Record<string, string> = {
   bedrock: "Bedrock",
   anthropic: "Claude",
   openai: "OpenAI",
+  groq: "Groq",
   scripted: "Offline",
 };
 

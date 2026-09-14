@@ -28,8 +28,10 @@ agent SDK, with two deliberately different model tiers:
 | **Call partner** — the simulated receptionist | Must ask one question at a time and be realistically brisk | Fast model with a persona prompt |
 
 **Personalisation** — every sentence the user picks is remembered and fed back
-into the next prediction. Backed by **Amazon Bedrock AgentCore Memory** when
-configured; a local JSON store otherwise, with identical behaviour.
+into the next prediction: the choices most *relevant* to what she is saying
+right now, then the most recent. Backed by **Amazon Bedrock AgentCore Memory**
+(raw events for exact phrasing, a semantic strategy for retrieval by meaning);
+a local JSON store otherwise, with the same interface.
 
 **Never goes silent** — if the live model is unreachable (conference wifi), the
 prediction loop falls back to a pattern-matched offline engine rather than an
@@ -38,8 +40,9 @@ empty screen. The status pill in the header shows which engine answered.
 ### Model providers
 
 Relay picks a provider from whatever credentials it finds, in order:
-**Bedrock → Anthropic → OpenAI → offline**. Switching is a config change; there
-is no provider-specific code path.
+**Bedrock → Anthropic → OpenAI → Groq → offline**. Switching is a config
+change; there is no provider-specific code path. Groq (`openai/gpt-oss-120b`)
+is the current dev setup: ~1.7 s warm on the prediction loop, one round trip.
 
 ```
 server/relay/
@@ -95,12 +98,14 @@ Speech API; other browsers get typing and the word board).
 
 ### Enabling AgentCore Memory
 
+With AWS credentials in `.env` (or a profile), create the resource once:
+
 ```bash
-pip install bedrock-agentcore
+python scripts/create_memory.py
 ```
 
-Create a Memory resource in the AgentCore console, put its id in
-`AGENTCORE_MEMORY_ID`. The local JSON store is used until then.
+Paste the printed id into `AGENTCORE_MEMORY_ID`. The local JSON store is used
+until then, and again if AgentCore is unreachable — memory never blocks speech.
 
 ## Demo script (≈3 min)
 

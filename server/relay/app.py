@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
-from fastapi import FastAPI
+import asyncio
+import logging
+from contextlib import asynccontextmanager
+from typing import AsyncIterator
+
+from fastapi import FastAPI, Header
 from fastapi.middleware.cors import CORSMiddleware
 
 from .caller import partner_reply
 from .config import settings
-from .executor import activity_log, execute
+from .executor import activity, execute
 from .memory import memory
 from .predictor import predict
 from .profile import demo_profile
@@ -18,13 +23,31 @@ from .schemas import (
     CommitRequest,
     CommitResponse,
     HealthResponse,
+    InputSignal,
     PredictRequest,
     PredictResponse,
     Scenario,
     UserProfile,
 )
 
-app = FastAPI(title="Relay", version="0.1.0")
+
+# Strands warns on every tool-loop turn that OpenAI-compatible endpoints drop
+# reasoning blocks from history. Expected; not actionable.
+logging.getLogger("strands.models.openai").setLevel(logging.ERROR)
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    # The first call to a provider pays for connection setup and a cold model
+    # (~6s on Groq). Pay it here, not on the first thing the user says.
+    if settings.provider != "scripted":
+        asyncio.create_task(
+            predict(PredictRequest(signals=[InputSignal(kind="speech", text="hello")]))
+        )
+    yield
+
+
+app = FastAPI(title="Relay", version="0.1.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -66,16 +89,18 @@ async def do_partner_reply(req: CallReplyRequest) -> CallReplyResponse:
 
 
 @app.post("/api/commit", response_model=CommitResponse)
-async def commit(req: CommitRequest) -> CommitResponse:
+async def commit(
+    req: CommitRequest, x_relay_session: str = Header(default="anonymous")
+) -> CommitResponse:
     """The user chose an utterance. Remember it, and run any action it implies."""
-    memory.record_choice(req.text, req.channel)
+    await asyncio.to_thread(memory.record_choice, req.text, req.channel)
 
     if req.action and req.action.type != "none":
-        return await execute(req.text, req.action)
+        return await execute(req.text, req.action, x_relay_session)
 
     return CommitResponse(spoken=req.text, receipt="", source=settings.provider)  # type: ignore[arg-type]
 
 
 @app.get("/api/activity")
-async def activity() -> dict[str, object]:
-    return {"entries": list(reversed(activity_log[-30:])), "memory": memory.stats()}
+async def activity_feed(x_relay_session: str = Header(default="anonymous")) -> dict[str, object]:
+    return {"entries": activity.entries(x_relay_session), "memory": memory.stats()}

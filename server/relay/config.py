@@ -36,6 +36,8 @@ def _resolve_provider() -> str:
         return "anthropic"
     if requested == "openai" and os.environ.get("OPENAI_API_KEY"):
         return "openai"
+    if requested == "groq" and os.environ.get("GROQ_API_KEY"):
+        return "groq"
     if requested == "scripted":
         return "scripted"
 
@@ -46,6 +48,8 @@ def _resolve_provider() -> str:
         return "anthropic"
     if os.environ.get("OPENAI_API_KEY"):
         return "openai"
+    if os.environ.get("GROQ_API_KEY"):
+        return "groq"
     return "scripted"
 
 
@@ -59,7 +63,10 @@ class Settings:
     anthropic_smart_model: str
     openai_fast_model: str
     openai_smart_model: str
+    groq_fast_model: str
+    groq_smart_model: str
     agentcore_memory_id: str
+    agentcore_actor_id: str
     memory_path: str
     port: int
 
@@ -69,6 +76,7 @@ class Settings:
             "bedrock": self.bedrock_fast_model,
             "anthropic": self.anthropic_fast_model,
             "openai": self.openai_fast_model,
+            "groq": self.groq_fast_model,
         }.get(self.provider, "scripted")
 
     @property
@@ -77,6 +85,7 @@ class Settings:
             "bedrock": self.bedrock_smart_model,
             "anthropic": self.anthropic_smart_model,
             "openai": self.openai_smart_model,
+            "groq": self.groq_smart_model,
         }.get(self.provider, "scripted")
 
 
@@ -95,7 +104,12 @@ settings = Settings(
     anthropic_smart_model=os.environ.get("ANTHROPIC_SMART_MODEL", "claude-opus-5"),
     openai_fast_model=os.environ.get("OPENAI_FAST_MODEL", "gpt-4o-mini"),
     openai_smart_model=os.environ.get("OPENAI_SMART_MODEL", "gpt-4o"),
+    # 20b is ~400ms quicker but echoes fragments back ("Doc Tuesday.") instead
+    # of completing them; 120b stays natural and spreads across intents.
+    groq_fast_model=os.environ.get("GROQ_FAST_MODEL", "openai/gpt-oss-120b"),
+    groq_smart_model=os.environ.get("GROQ_SMART_MODEL", "openai/gpt-oss-120b"),
     agentcore_memory_id=os.environ.get("AGENTCORE_MEMORY_ID", ""),
+    agentcore_actor_id=os.environ.get("AGENTCORE_ACTOR_ID", "maya"),
     memory_path=os.environ.get("RELAY_MEMORY_PATH", ".relay-memory.json"),
     port=int(os.environ.get("PORT", "8787")),
 )

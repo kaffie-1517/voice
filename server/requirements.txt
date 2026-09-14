@@ -11,6 +11,7 @@ uvicorn[standard]
 pydantic
 python-dotenv
 
-# Optional — only needed for the AgentCore Memory layer. Relay degrades to a
-# local JSON store when this is absent, so the demo never hard-fails on it.
-# pip install bedrock-agentcore
+# AgentCore Memory. Relay degrades to a local JSON store when
+# AGENTCORE_MEMORY_ID is unset or credentials are missing, so the demo never
+# hard-fails on it.
+bedrock-agentcore

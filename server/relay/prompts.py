@@ -57,9 +57,10 @@ def build_predict_system_prompt(
     if learned_phrases:
         recent = "\n".join(f"  - {p}" for p in learned_phrases[:12])
         learned_block = (
-            "\n\n## What she has actually chosen recently\n"
-            "These are utterances she picked in past sessions, newest first. They "
-            "are the strongest available signal for her real phrasing and current "
+            "\n\n## What she has actually chosen before\n"
+            "These are utterances she picked in past sessions — the ones most "
+            "related to this moment first, then the most recent. They are the "
+            "strongest available signal for her real phrasing and current "
             "concerns. Prefer this vocabulary when it fits.\n"
             f"{recent}"
         )
