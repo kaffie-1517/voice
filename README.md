@@ -16,6 +16,10 @@ booking — it happens.
 Think of it as the AI version of a telecom relay service for the deaf, but for
 word-finding instead of hearing.
 
+## Architecture
+
+![Relay architecture](docs/architecture.svg)
+
 ## How it works
 
 Built on **[Strands Agents](https://strandsagents.com)**, AWS's open-source
@@ -124,6 +128,23 @@ Then, on phones:
   she taps is sent as her own message.
 - "Send my scan to Dr. Chen" runs the Strands executor, whose `send_document`
   tool posts a PDF into the linked Dr. Chen chat.
+
+## What is real and what is simulated
+
+Judges should know exactly what they are looking at.
+
+| Piece | Status |
+|---|---|
+| Prediction loop, executor agent, call partner | Real Strands agents, live model calls |
+| Speech in (Whisper) and out (neural TTS) | Real, via Groq; browser fallbacks |
+| `send_message`, `send_document` tools | **Real** — deliver to linked Telegram chats |
+| `set_reminder`, `place_call`, `order_item` tools | **Simulated** — the agent calls them and a receipt is logged to the Done tab; nothing external happens |
+| Phone calls | **Simulated partner** (receptionist, pharmacy, son). No telephony. The hard part — replying in time — is fully exercised |
+| Personalisation memory | Real; local JSON store today, AgentCore Memory backend coded and switchable by config |
+| Demo persona "Maya Ellis" and her contacts | Fictional |
+
+Built during the hackathon submission period with AI coding assistance
+(Claude Code). No pre-existing code was incorporated.
 
 ## Demo script (≈3 min)
 

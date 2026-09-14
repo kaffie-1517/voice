@@ -34,12 +34,6 @@
     <text x="52" y="332" fill="#374151">• Tap a button → delivered to them</text>
     <text x="52" y="350" fill="#374151">• Long-polling, no public URL</text>
   </g>
-  <g>
-    <rect x="40" y="390" width="220" height="70" rx="10" fill="#fff7ed" stroke="#fdba74"/>
-    <text x="150" y="414" text-anchor="middle" font-weight="600" fill="#9a3412">Simulated call partner</text>
-    <text x="52" y="436" fill="#374151">Receptionist / pharmacy / son —</text>
-    <text x="52" y="452" fill="#374151">one question at a time, realistic pace</text>
-  </g>
 
   <!-- Server core -->
   <rect x="330" y="110" width="460" height="470" rx="14" fill="#f9fafb" stroke="#9ca3af" stroke-dasharray="6 4"/>
@@ -80,22 +74,22 @@
 
   <!-- Partner + memory + offline row -->
   <g>
-    <rect x="350" y="444" width="130" height="118" rx="8" fill="#fff7ed" stroke="#fdba74"/>
-    <text x="415" y="466" text-anchor="middle" font-weight="600" fill="#9a3412">Call partner</text>
-    <text x="415" y="486" text-anchor="middle" fill="#374151">Strands Agent</text>
-    <text x="415" y="502" text-anchor="middle" fill="#374151">structured output</text>
-    <text x="415" y="518" text-anchor="middle" fill="#374151">persona prompt</text>
-    <text x="415" y="540" text-anchor="middle" fill="#6b7280">scripted lines</text>
-    <text x="415" y="554" text-anchor="middle" fill="#6b7280">when offline</text>
+    <rect x="495" y="444" width="130" height="118" rx="8" fill="#fff7ed" stroke="#fdba74"/>
+    <text x="560" y="466" text-anchor="middle" font-weight="600" fill="#9a3412">Call partner</text>
+    <text x="560" y="486" text-anchor="middle" fill="#374151">Strands Agent</text>
+    <text x="560" y="502" text-anchor="middle" fill="#374151">structured output</text>
+    <text x="560" y="518" text-anchor="middle" fill="#374151">persona prompt</text>
+    <text x="560" y="540" text-anchor="middle" fill="#6b7280">scripted lines</text>
+    <text x="560" y="554" text-anchor="middle" fill="#6b7280">when offline</text>
   </g>
   <g>
-    <rect x="495" y="444" width="130" height="118" rx="8" fill="#e0f2fe" stroke="#7dd3fc"/>
-    <text x="560" y="466" text-anchor="middle" font-weight="600" fill="#0c4a6e">Phrasebook</text>
-    <text x="560" y="486" text-anchor="middle" fill="#374151">every chosen</text>
-    <text x="560" y="502" text-anchor="middle" fill="#374151">sentence remembered</text>
-    <text x="560" y="518" text-anchor="middle" fill="#374151">fuzzy recall by sound</text>
-    <text x="560" y="540" text-anchor="middle" fill="#6b7280">AgentCore Memory</text>
-    <text x="560" y="554" text-anchor="middle" fill="#6b7280">or local JSON</text>
+    <rect x="350" y="444" width="130" height="118" rx="8" fill="#e0f2fe" stroke="#7dd3fc"/>
+    <text x="415" y="466" text-anchor="middle" font-weight="600" fill="#0c4a6e">Phrasebook</text>
+    <text x="415" y="486" text-anchor="middle" fill="#374151">every chosen</text>
+    <text x="415" y="502" text-anchor="middle" fill="#374151">sentence remembered</text>
+    <text x="415" y="518" text-anchor="middle" fill="#374151">fuzzy recall by sound</text>
+    <text x="415" y="540" text-anchor="middle" fill="#6b7280">AgentCore Memory</text>
+    <text x="415" y="554" text-anchor="middle" fill="#6b7280">or local JSON</text>
   </g>
   <g>
     <rect x="640" y="444" width="130" height="118" rx="8" fill="#fee2e2" stroke="#fca5a5"/>
@@ -142,22 +136,21 @@
   <line x1="260" y1="190" x2="350" y2="250" stroke="#d97706" stroke-width="2" marker-end="url(#arrow-accent)"/>
   <line x1="260" y1="300" x2="350" y2="270" stroke="#d97706" stroke-width="2" marker-end="url(#arrow-accent)"/>
   <line x1="260" y1="330" x2="350" y2="370" stroke="#4b5563" stroke-width="1.5" marker-end="url(#arrow)"/>
-  <line x1="260" y1="425" x2="350" y2="500" stroke="#4b5563" stroke-width="1.5" marker-end="url(#arrow)"/>
 
   <!-- Arrows: server -> providers -->
   <line x1="770" y1="260" x2="860" y2="190" stroke="#d97706" stroke-width="2" marker-end="url(#arrow-accent)"/>
   <line x1="770" y1="376" x2="860" y2="200" stroke="#4b5563" stroke-width="1.5" marker-end="url(#arrow)"/>
-  <line x1="550" y1="161" x2="860" y2="310" stroke="#4b5563" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="770" y1="172" x2="860" y2="300" stroke="#4b5563" stroke-width="1.5" marker-end="url(#arrow)"/>
   <line x1="770" y1="400" x2="860" y2="409" stroke="#4b5563" stroke-width="1.5" marker-end="url(#arrow)"/>
-  <line x1="625" y1="540" x2="860" y2="505" stroke="#4b5563" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <path d="M415,562 L415,573 L870,573 L870,537" fill="none" stroke="#4b5563" stroke-width="1.5" marker-end="url(#arrow)"/>
 
   <!-- Internal arrows -->
   <line x1="560" y1="308" x2="560" y2="328" stroke="#4b5563" stroke-width="1.5" marker-end="url(#arrow)"/>
   <text x="572" y="322" fill="#6b7280" font-size="12">she taps one</text>
-  <line x1="705" y1="444" x2="705" y2="310" stroke="#b91c1c" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arrow)"/>
-  <text x="712" y="430" fill="#b91c1c" font-size="12">fallback</text>
-  <line x1="560" y1="444" x2="560" y2="310" stroke="#0369a1" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arrow)"/>
-  <text x="566" y="430" fill="#0369a1" font-size="12">relevant past choices</text>
+  <path d="M770,503 L781,503 L781,290 L771,290" fill="none" stroke="#b91c1c" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arrow)"/>
+  <text x="784" y="400" fill="#b91c1c" font-size="11" transform="rotate(-90 784 400)" text-anchor="middle">fallback</text>
+  <path d="M350,503 L339,503 L339,290 L349,290" fill="none" stroke="#0369a1" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arrow)"/>
+  <text x="336" y="400" fill="#0369a1" font-size="11" transform="rotate(-90 336 400)" text-anchor="middle">relevant past choices</text>
 
   <!-- Legend -->
   <rect x="40" y="590" width="14" height="14" fill="#fef3c7" stroke="#f59e0b"/>
