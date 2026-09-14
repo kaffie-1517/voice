@@ -4,11 +4,12 @@ import type { Candidate } from "../types";
 interface Props {
   candidates: Candidate[];
   loading: boolean;
+  degraded?: boolean;
   onPick: (c: Candidate) => void;
   emptyHint: string;
 }
 
-export function Suggestions({ candidates, loading, onPick, emptyHint }: Props) {
+export function Suggestions({ candidates, loading, degraded = false, onPick, emptyHint }: Props) {
   // Number keys pick a candidate — for a carer driving the demo, or a user
   // with a keyboard, this is faster than reaching for the screen.
   useEffect(() => {
@@ -36,6 +37,11 @@ export function Suggestions({ candidates, loading, onPick, emptyHint }: Props) {
   return (
     <>
       {loading && <div className="thinking" aria-hidden />}
+      {degraded && (
+        <div className="offline-note" role="status">
+          Live model unreachable — these are offline guesses. Your own words are always at the top.
+        </div>
+      )}
       <div className="suggestions" role="list" aria-label="Suggested things to say">
         {candidates.map((c, i) => (
           <button

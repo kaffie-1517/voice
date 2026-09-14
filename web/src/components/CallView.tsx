@@ -177,6 +177,7 @@ export function CallView({ speech, speak, onReceipt, onEngine }: Props) {
         <Suggestions
           candidates={pred.candidates}
           loading={pred.loading}
+          degraded={pred.degraded}
           onPick={pick}
           emptyHint={ended ? "The call is over." : "Waiting for them to finish…"}
         />

@@ -19,6 +19,22 @@ from .schemas import PredictedUtterance, PredictionSet, PredictRequest, Turn
 
 # fragment patterns -> candidate utterances, most likely first
 _RULES: list[tuple[str, list[tuple[str, str, float]]]] = [
+    # Safety first: these must never be answered with "Give me a minute".
+    (
+        r"\b(fire|smoke|burn)",
+        [
+            ("There's a fire. I need help now.", "Fire", 0.95),
+            ("Call the fire brigade.", "Fire brigade", 0.80),
+        ],
+    ),
+    (
+        r"\b(help|emergenc|ambulance|police|hurt|fall|fell|chest|breath)",
+        [
+            ("I need help right now.", "Need help", 0.93),
+            ("Please call an ambulance.", "Ambulance", 0.78),
+            ("I've had a fall.", "Fallen", 0.55),
+        ],
+    ),
     (
         r"\b(doc|dr|chen|appoint|clinic|book)",
         [

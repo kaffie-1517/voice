@@ -154,10 +154,10 @@ _FILLER = {
 }
 
 
-def anchor_words(req: PredictRequest) -> list[str]:
+def anchor_counts(req: PredictRequest) -> dict[str, int]:
     """Content words she clearly produced — tapped, typed, or spoken as real
-    words of some length — most repeated first. These must survive into the
-    candidates. A word said twice is almost never a mis-hearing."""
+    words of some length — with how strongly. Tapped and typed words count
+    double; a spoken word said twice is almost never a mis-hearing."""
     counts: dict[str, int] = {}
     for s in req.signals:
         for raw in s.text.split():
@@ -167,6 +167,12 @@ def anchor_words(req: PredictRequest) -> list[str]:
             if s.kind == "speech" and len(w) < 4:
                 continue  # too short to trust the recogniser on
             counts[w] = counts.get(w, 0) + (1 if s.kind == "speech" else 2)
+    return counts
+
+
+def anchor_words(req: PredictRequest) -> list[str]:
+    """Anchor words, strongest first. These must survive into the candidates."""
+    counts = anchor_counts(req)
     return sorted(counts, key=lambda w: -counts[w])
 
 

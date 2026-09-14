@@ -82,6 +82,7 @@ export function ComposeView({ speech, speak, onReceipt, onEngine }: Props) {
         <Suggestions
           candidates={pred.candidates}
           loading={pred.loading}
+          degraded={pred.degraded}
           onPick={pick}
           emptyHint="Suggestions appear here as you speak. Tap one to say it."
         />

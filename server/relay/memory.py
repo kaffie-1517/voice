@@ -18,6 +18,7 @@ import asyncio
 import json
 import re
 import time
+from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -29,8 +30,27 @@ from .config import settings
 PHRASEBOOK_SESSION = "phrasebook"
 
 
-def _tokens(text: str) -> set[str]:
-    return {t for t in re.findall(r"[a-z']+", text.lower()) if len(t) > 2}
+def _tokens(text: str, min_len: int = 3) -> set[str]:
+    return {t for t in re.findall(r"[a-z']+", text.lower()) if len(t) >= min_len}
+
+
+def _sounds_like(heard: str, word: str) -> bool:
+    """Loose match for a recogniser's mangling of impaired speech: "om" for
+    "home", "chin" for "Chen", "tues" for "tuesday"."""
+    if heard == word:
+        return True
+    if len(heard) == 2:
+        # A dropped consonant or two ("om" for "home"). Only against words
+        # long enough that the match is not a coincidence of two letters.
+        return len(word) >= 4 and heard in word
+    if heard in word or word in heard:
+        return True
+    return SequenceMatcher(None, heard, word).ratio() >= 0.75
+
+
+def _overlap(query_tokens: set[str], text: str) -> int:
+    words = _tokens(text)
+    return sum(1 for q in query_tokens if any(_sounds_like(q, w) for w in words))
 
 
 class Phrasebook(Protocol):
@@ -79,13 +99,13 @@ class LocalPhrasebook:
         return out
 
     def relevant_choices(self, query: str, limit: int = 5) -> list[str]:
-        needles = _tokens(query)
+        needles = _tokens(query, min_len=2)
         if not needles:
             return []
         scored: dict[str, int] = {}
         for entry in self._entries:
             text = entry.get("text", "")
-            overlap = len(needles & _tokens(text))
+            overlap = _overlap(needles, text)
             if overlap:
                 scored[text] = max(scored.get(text, 0), overlap)
         return [t for t, _ in sorted(scored.items(), key=lambda kv: -kv[1])[:limit]]

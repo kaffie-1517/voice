@@ -321,6 +321,16 @@ button:focus-visible, [tabindex]:focus-visible {
   color: var(--faint);
 }
 
+.offline-note {
+  margin: 0 0 10px;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 170, 60, 0.08);
+  border: 1px solid rgba(255, 170, 60, 0.3);
+  color: var(--muted);
+  font-size: 13px;
+}
+
 .thinking {
   height: 3px;
   border-radius: 2px;

@@ -15,7 +15,7 @@ import uuid
 from .config import settings
 from .memory import learned_phrases
 from .profile import demo_profile
-from .prompts import anchor_words, build_predict_system_prompt, build_predict_user_prompt
+from .prompts import anchor_counts, build_predict_system_prompt, build_predict_user_prompt
 from .providers import load_model
 from .schemas import (
     ActionSpec,
@@ -59,33 +59,44 @@ def _honour_her_words(candidates: list[Candidate], req: PredictRequest) -> list[
     """A word she clearly said must be on screen. Models drift towards what a
     caller in her situation usually wants; this keeps what she actually said
     at the top, and puts it there verbatim if the model dropped it entirely."""
-    anchors = anchor_words(req)
+    counts = anchor_counts(req)
+    anchors = sorted(counts, key=lambda w: -counts[w])
     if not anchors or not candidates:
         return candidates
+
+    # Words she said more than once (or tapped) are beyond doubt. Every one of
+    # them must appear somewhere on screen; a single spoken word only needs to
+    # be present if nothing else of hers is.
+    strong = [a for a in anchors if counts[a] >= 2] or anchors[:1]
 
     def uses_anchor(c: Candidate) -> bool:
         text = c.text.lower()
         return any(a in text for a in anchors)
 
     hits = [c for c in candidates if uses_anchor(c)]
+    ordered = hits + [c for c in candidates if not uses_anchor(c)]
     if hits:
         top = max(c.confidence for c in candidates)
         hits[0].confidence = max(hits[0].confidence, top)
-        return hits + [c for c in candidates if not uses_anchor(c)]
 
-    # The model dropped her word entirely. Say it back plainly — the most
-    # repeated word only, since a one-off is the likeliest mis-hearing.
-    literal = anchors[0].capitalize() + "."
-    return [
-        Candidate(
-            id=uuid.uuid4().hex[:8],
-            text=literal,
-            gist="As said",
-            confidence=0.5,
-            action=None,
-        ),
-        *candidates[: max(0, req.count - 1)],
-    ]
+    covered = all(any(a in c.text.lower() for c in candidates) for a in strong)
+    if covered:
+        return ordered
+
+    # Something she clearly said is missing from every candidate. Say her
+    # words back plainly, in her order of emphasis — for "fire… house… help"
+    # that is the right thing to have on screen. First if nothing else of
+    # hers made it; last if the model got the gist and just dropped a word.
+    literal = Candidate(
+        id=uuid.uuid4().hex[:8],
+        text=" ".join(a.capitalize() + "." for a in (strong + [a for a in anchors if a not in strong])[:4]),
+        gist="As said",
+        confidence=0.5,
+        action=None,
+    )
+    if hits:
+        return [*ordered[: max(0, req.count - 1)], literal]
+    return [literal, *ordered[: max(0, req.count - 1)]]
 
 
 async def predict(req: PredictRequest) -> PredictResponse:
