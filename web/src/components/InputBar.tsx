@@ -37,7 +37,7 @@ export function InputBar({ speech, keywords, onTyped, onClear }: Props) {
         {keywords.map((k, i) => (
           <span key={`k${i}`} className="chip keyword">{k}</span>
         ))}
-        {speech.interim && <span className="chip interim">{speech.interim}</span>}
+        {speech.interim && <span className="chip interim">{speech.interim === "listening" ? "…" : speech.interim}</span>}
       </div>
 
       <div className="controls">
@@ -53,9 +53,11 @@ export function InputBar({ speech, keywords, onTyped, onClear }: Props) {
 
         <span className="hint">
           {!speech.supported
-            ? "Speech input needs Chrome or Edge. You can still type or tap words."
+            ? "Speech input needs a microphone and Chrome or Edge. You can still type or tap words."
             : speech.listening
-              ? "Listening. Take your time."
+              ? speech.interim === "…"
+                ? "Working out what you said…"
+                : "Listening. Take your time — pauses are fine."
               : "Tap the mic and start talking."}
         </span>
 

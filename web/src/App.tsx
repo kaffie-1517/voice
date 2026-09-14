@@ -25,12 +25,15 @@ export default function App() {
   });
   const [toast, setToast] = useState<string | null>(null);
 
-  const speech = useSpeechInput();
-  const { speak } = useSpeak();
+  const speech = useSpeechInput(health?.stt ? "server" : "browser");
+  const { speak, speaking } = useSpeak(Boolean(health?.tts));
 
   useEffect(() => {
     api.health().then(setHealth).catch(() => setHealth(null));
   }, []);
+
+  // Don't let the mic hear Relay's own voice and feed it back as fragments.
+  useEffect(() => { speech.setMuted(speaking); }, [speaking, speech]);
 
   useEffect(() => {
     if (!toast) return;

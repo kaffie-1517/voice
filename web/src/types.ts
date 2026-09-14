@@ -85,6 +85,8 @@ export interface Health {
   smart_model: string;
   memory_backend: string;
   scripted_fallback: boolean;
+  stt: boolean;
+  tts: boolean;
 }
 
 export interface ActivityEntry {

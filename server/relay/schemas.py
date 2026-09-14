@@ -181,3 +181,14 @@ class HealthResponse(BaseModel):
     smart_model: str
     memory_backend: str
     scripted_fallback: bool
+    stt: bool = False
+    tts: bool = False
+
+
+class TranscribeResponse(BaseModel):
+    text: str
+
+
+class SpeakRequest(BaseModel):
+    text: str
+    who: Literal["self", "partner"] = "self"

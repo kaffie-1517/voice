@@ -7,8 +7,9 @@ import logging
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
-from fastapi import FastAPI, Header
+from fastapi import FastAPI, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 
 from .caller import partner_reply
 from .config import settings
@@ -27,8 +28,11 @@ from .schemas import (
     PredictRequest,
     PredictResponse,
     Scenario,
+    SpeakRequest,
+    TranscribeResponse,
     UserProfile,
 )
+from .speech import stt_available, synthesize, transcribe, tts_available
 
 
 # Strands warns on every tool-loop turn that OpenAI-compatible endpoints drop
@@ -65,7 +69,26 @@ async def health() -> HealthResponse:
         smart_model=settings.smart_model,
         memory_backend=memory.backend,
         scripted_fallback=settings.provider == "scripted",
+        stt=stt_available(),
+        tts=tts_available(),
     )
+
+
+@app.post("/api/transcribe", response_model=TranscribeResponse)
+async def do_transcribe(audio: UploadFile) -> TranscribeResponse:
+    data = await audio.read()
+    text = await transcribe(data, audio.filename or "clip.webm")
+    if text is None:
+        raise HTTPException(status_code=503, detail="transcription unavailable")
+    return TranscribeResponse(text=text)
+
+
+@app.post("/api/speak")
+async def do_speak(req: SpeakRequest) -> Response:
+    audio = await synthesize(req.text, req.who)
+    if audio is None:
+        raise HTTPException(status_code=503, detail="synthesis unavailable")
+    return Response(content=audio, media_type="audio/wav")
 
 
 @app.get("/api/profile", response_model=UserProfile)

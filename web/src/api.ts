@@ -56,4 +56,27 @@ export const api = {
     post<CallReplyResponse>("/api/call/reply", { scenario_id, transcript }),
   commit: (text: string, channel: Channel, action: ActionSpec | null) =>
     post<CommitResponse>("/api/commit", { text, channel, action }),
+  transcribe: async (clip: Blob, signal?: AbortSignal): Promise<string> => {
+    const form = new FormData();
+    const ext = clip.type.includes("ogg") ? "ogg" : clip.type.includes("mp4") ? "mp4" : "webm";
+    form.append("audio", clip, `clip.${ext}`);
+    const res = await fetch("/api/transcribe", {
+      method: "POST",
+      headers: { "X-Relay-Session": SESSION },
+      body: form,
+      signal,
+    });
+    if (!res.ok) throw new Error(`/api/transcribe → ${res.status}`);
+    const data = (await res.json()) as { text: string };
+    return data.text;
+  },
+  speak: async (text: string, who: "self" | "partner"): Promise<Blob> => {
+    const res = await fetch("/api/speak", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Relay-Session": SESSION },
+      body: JSON.stringify({ text, who }),
+    });
+    if (!res.ok) throw new Error(`/api/speak → ${res.status}`);
+    return res.blob();
+  },
 };
